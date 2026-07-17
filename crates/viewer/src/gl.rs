@@ -15,6 +15,52 @@ pub struct ImageProgram {
     pub u_colormap: WebGlUniformLocation,
 }
 
+/// The overlay (lines/points) program and its uniform locations.
+pub struct OverlayProgram {
+    pub program: WebGlProgram,
+    pub u_view: WebGlUniformLocation,
+    pub u_color: WebGlUniformLocation,
+}
+
+impl OverlayProgram {
+    pub fn new(gl: &Gl) -> Result<Self, JsValue> {
+        let vert = compile(gl, Gl::VERTEX_SHADER, include_str!("shaders/overlay.vert"))?;
+        let frag = compile(
+            gl,
+            Gl::FRAGMENT_SHADER,
+            include_str!("shaders/overlay.frag"),
+        )?;
+        let program = link(gl, &vert, &frag)?;
+        let loc = |name: &str| {
+            gl.get_uniform_location(&program, name)
+                .ok_or_else(|| JsValue::from_str(&format!("missing uniform {name}")))
+        };
+        Ok(Self {
+            u_view: loc("u_view")?,
+            u_color: loc("u_color")?,
+            program,
+        })
+    }
+}
+
+/// Upload `f32` vertex data (x,y pairs) into a freshly created buffer bound to
+/// attribute location 0. Returns the buffer so the caller can keep it alive.
+pub fn upload_verts(gl: &Gl, verts: &[f32]) -> Result<web_sys::WebGlBuffer, JsValue> {
+    let buf = gl
+        .create_buffer()
+        .ok_or_else(|| JsValue::from_str("create_buffer"))?;
+    gl.bind_buffer(Gl::ARRAY_BUFFER, Some(&buf));
+    // SAFETY: the view borrows `verts` only for this synchronous buffer_data
+    // call; no allocation happens between the view and the copy into GL.
+    unsafe {
+        let view = js_sys::Float32Array::view(verts);
+        gl.buffer_data_with_array_buffer_view(Gl::ARRAY_BUFFER, &view, Gl::STATIC_DRAW);
+    }
+    gl.vertex_attrib_pointer_with_i32(0, 2, Gl::FLOAT, false, 0, 0);
+    gl.enable_vertex_attrib_array(0);
+    Ok(buf)
+}
+
 impl ImageProgram {
     pub fn new(gl: &Gl) -> Result<Self, JsValue> {
         let vert = compile(gl, Gl::VERTEX_SHADER, include_str!("shaders/image.vert"))?;
@@ -57,28 +103,6 @@ pub fn make_texture(gl: &Gl, nx: usize, ny: usize, rgba: &[u8]) -> Result<WebGlT
     gl.tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MIN_FILTER, Gl::NEAREST as i32);
     gl.tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MAG_FILTER, Gl::NEAREST as i32);
     Ok(tex)
-}
-
-/// A unit-quad VAO ([0,1]² as two triangles) for the image and any overlays.
-pub fn make_quad(gl: &Gl) -> Result<(), JsValue> {
-    let verts: [f32; 12] = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
-    let vao = gl
-        .create_vertex_array()
-        .ok_or_else(|| JsValue::from_str("create_vao"))?;
-    gl.bind_vertex_array(Some(&vao));
-    let buf = gl
-        .create_buffer()
-        .ok_or_else(|| JsValue::from_str("create_buffer"))?;
-    gl.bind_buffer(Gl::ARRAY_BUFFER, Some(&buf));
-    // SAFETY: the view borrows `verts` only for this synchronous buffer_data call;
-    // no allocation happens between the view and the copy into GL.
-    unsafe {
-        let view = js_sys::Float32Array::view(&verts);
-        gl.buffer_data_with_array_buffer_view(Gl::ARRAY_BUFFER, &view, Gl::STATIC_DRAW);
-    }
-    gl.vertex_attrib_pointer_with_i32(0, 2, Gl::FLOAT, false, 0, 0);
-    gl.enable_vertex_attrib_array(0);
-    Ok(())
 }
 
 fn compile(gl: &Gl, kind: u32, src: &str) -> Result<WebGlShader, JsValue> {
