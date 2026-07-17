@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod clumps;
 mod composite;
 mod fits;
 mod stretch;
