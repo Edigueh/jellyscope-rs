@@ -11,3 +11,8 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
+js-sys = "0.3"
+# Pinned to match the installed wasm-bindgen CLI; the crate and CLI versions
+# must agree exactly or the generated JS bindings mismatch at runtime.
+wasm-bindgen = "=0.2.100"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "WebGl2RenderingContext", "WebGlProgram", "WebGlShader", "WebGlBuffer", "WebGlTexture", "WebGlUniformLocation", "WebGlVertexArrayObject", "MouseEvent", "WheelEvent", "console"] }

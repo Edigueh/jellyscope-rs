@@ -2,3 +2,4 @@
 /dist
 /data
 .DS_Store
+/web/pkg
