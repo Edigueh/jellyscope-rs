@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jellyscope</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Jellyscope</h1>
+      <span class="sub">JWST jellyfish galaxy datacubes</span>
+    </header>
+
+    <div id="layout">
+      <aside id="controls">
+        <label>Dataset<select id="dataset"></select></label>
+        <label>Datacube<select id="cube"></select></label>
+
+        <fieldset>
+          <legend>View</legend>
+          <label><input type="radio" name="mode" value="single" checked /> Single filter</label>
+          <label><input type="radio" name="mode" value="rgb" /> RGB composite</label>
+        </fieldset>
+
+        <div id="single-controls">
+          <label>Filter<select id="filter"></select></label>
+          <label>Stretch
+            <select id="stretch">
+              <option value="asinh">asinh</option>
+              <option value="log">log</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="rgb-controls" hidden>
+          <label>R<select id="rgb-r"></select></label>
+          <label>G<select id="rgb-g"></select></label>
+          <label>B<select id="rgb-b"></select></label>
+          <label>Recipe
+            <select id="rgb-method">
+              <option value="percentile">percentile-asinh</option>
+              <option value="lupton">Lupton</option>
+            </select>
+          </label>
+        </div>
+
+        <label><input type="checkbox" id="boundaries" checked /> Clump boundaries</label>
+
+        <div id="panel">
+          <h2>Clump</h2>
+          <p id="panel-empty">Click a clump to inspect it.</p>
+          <dl id="panel-props" hidden></dl>
+        </div>
+
+        <p id="readout"></p>
+      </aside>
+
+      <main>
+        <canvas id="view"></canvas>
+      </main>
+    </div>
+
+    <script type="module" src="glue.js"></script>
+  </body>
+</html>
