@@ -8,3 +8,5 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+fitrs = "0.5.0"
+thiserror = "2.0.18"
