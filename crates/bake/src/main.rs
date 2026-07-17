@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod composite;
 mod fits;
 mod stretch;
 mod wcs;

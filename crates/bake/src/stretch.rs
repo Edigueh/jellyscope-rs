@@ -125,7 +125,7 @@ fn median(xs: &mut [f64]) -> f64 {
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation
 )]
-fn percentile(values: &[f64], p: f64) -> f64 {
+pub(crate) fn percentile(values: &[f64], p: f64) -> f64 {
     let mut xs = values.to_vec();
     xs.sort_unstable_by(f64::total_cmp);
     let n = xs.len();
