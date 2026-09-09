@@ -67,10 +67,7 @@ async function main() {
     renderImage();
   });
   $("boundaries").addEventListener("change", applyBoundaries);
-  $("boundary-color").addEventListener("input", (e) => {
-    const [r, g, b] = hexToRgb(e.target.value);
-    state.viewer.setBoundaryColor(r, g, b);
-  });
+  $("boundary-color").addEventListener("input", drawBoundaries);
   $("centroids").addEventListener("change", (e) => {
     state.viewer.setShowCentroids(e.target.checked);
     $("centroid-labels").hidden = !e.target.checked;
@@ -92,11 +89,6 @@ async function main() {
   bindKeyboard();
   bindSplitters();
   onDatasetChange();
-}
-
-function hexToRgb(hex) {
-  const n = parseInt(hex.replace(/^#/, ""), 16);
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
 // ── Splitters ────────────────────────────────────────────────────────────────
@@ -230,6 +222,8 @@ async function onCubeChange() {
   state.filterNames = c.filters.map((f) => f.name);
   state.wavelengths = {};
   for (const f of c.filters) if (f.wavelength_um != null) state.wavelengths[f.name] = f.wavelength_um;
+
+  smoothBoundaries();
 
   state.viewer.beginCube(c.nx, c.ny, c.filters.length);
   await Promise.all(
@@ -413,35 +407,85 @@ function syncRgbSelects() {
 
 // ── Clump overlays + selection ───────────────────────────────────────────────
 
+// Chaikin corner-cutting: 2 iterations turn a pixel-staircase polygon into
+// a smooth curve without introducing external deps.
+function chaikin(points, iterations = 2) {
+  let pts = points.map(([x, y]) => [x, y]);
+  for (let k = 0; k < iterations; k++) {
+    const out = [];
+    const n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % n];
+      out.push([0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1]);
+      out.push([0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1]);
+    }
+    pts = out;
+  }
+  return pts;
+}
+
+function smoothBoundaries() {
+  state.smoothedBoundaries = state.cube.clumps.map((cl) => ({
+    id: cl.id,
+    points: chaikin(cl.boundary, 2),
+  }));
+}
+
+function drawBoundaries() {
+  const canvas = $("boundaries-overlay");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.round(rect.width * dpr);
+  const h = Math.round(rect.height * dpr);
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  ctx.clearRect(0, 0, w, h);
+  if (!$("boundaries").checked || !state.smoothedBoundaries) return;
+
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  const baseColor = $("boundary-color").value;
+  const selectedColor = "#d55e00"; // radialpaths --orange
+
+  for (const b of state.smoothedBoundaries) {
+    if (state.selected.has(BigInt(b.id))) continue;
+    strokeBoundary(ctx, b.points, baseColor);
+  }
+  for (const b of state.smoothedBoundaries) {
+    if (!state.selected.has(BigInt(b.id))) continue;
+    strokeBoundary(ctx, b.points, selectedColor);
+  }
+}
+
+function strokeBoundary(ctx, pts, color) {
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const [ix, iy] = pts[i];
+    const [cx, cy] = state.viewer.imageToCanvas(ix, iy);
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  ctx.closePath();
+  ctx.stroke();
+}
+
 function applyBoundaries() {
-  if (!$("boundaries").checked) {
-    state.viewer.set_boundaries(new Float32Array(0), new Int32Array(0), new BigInt64Array(0));
-    return;
-  }
-  const verts = [];
-  const counts = [];
-  const ids = [];
-  for (const cl of state.cube.clumps) {
-    for (const [x, y] of cl.boundary) verts.push(x, y);
-    counts.push(cl.boundary.length);
-    ids.push(BigInt(cl.id));
-  }
-  state.viewer.set_boundaries(new Float32Array(verts), new Int32Array(counts), new BigInt64Array(ids));
-  pushSelectionToViewer();
+  drawBoundaries();
 }
 
-function pushSelectionToViewer() {
-  state.viewer.setSelected(new BigInt64Array([...state.selected]));
-}
-
-// Central mutator: every code path calls this so the WASM viewer, rail, and
-// clump-list buttons stay in sync.
+// Central mutator: every code path calls this so overlays and rail stay in sync.
 function setSelection(nextSet, opts = {}) {
   state.selected = nextSet;
-  pushSelectionToViewer();
   renderRail();
   updateClumpListPressed();
-  if (!opts.skipRerender) { /* selection colour drawn by pushSelectionToViewer */ }
+  drawBoundaries();
+  if (opts.skipRerender) return;
 }
 
 function toggleClump(id, mode) {
@@ -483,6 +527,7 @@ function bindPointer() {
       moved = true;
       state.viewer.pan((e.offsetX - last[0]) * dpr, (e.offsetY - last[1]) * dpr);
       positionCentroidLabels();
+      drawBoundaries();
       last = [e.offsetX, e.offsetY];
     } else if (state.dragMode === "pan") {
       canvas.style.cursor = clumpAt(e.offsetX, e.offsetY) >= 0 ? "pointer" : "grab";
@@ -495,6 +540,7 @@ function bindPointer() {
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     state.viewer.zoom(factor, e.offsetX * dpr, e.offsetY * dpr);
     positionCentroidLabels();
+    drawBoundaries();
   }, { passive: false });
 }
 
@@ -695,6 +741,8 @@ function renderSeparations() {
   table.innerHTML = header + `<tbody>${rows}</tbody>`;
 }
 
+const JELLYFISH_SVG = `<svg class="jellyfish" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11a8 8 0 0 1 16 0v1H4v-1z"/><path d="M6 12c0 2 -1 3 -1 5M10 12c0 2 .5 4 0 6M14 12c0 2 -.5 4 0 6M18 12c0 2 1 3 1 5"/></svg>`;
+
 function renderClumpList() {
   const ul = $("clump-list");
   ul.innerHTML = "";
@@ -703,7 +751,7 @@ function renderClumpList() {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = `#${cl.id}`;
+    btn.innerHTML = `${JELLYFISH_SVG}<span>#${cl.id}</span>`;
     btn.dataset.id = String(cl.id);
     btn.setAttribute("aria-pressed", state.selected.has(BigInt(cl.id)));
     btn.title = `Clump ${cl.id} · ${cl.area_kpc2.toFixed(2)} kpc²`;
@@ -770,6 +818,10 @@ function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   state.viewer?.resize(Math.round(rect.width * dpr), Math.round(rect.height * dpr));
+  if (state.cube) {
+    positionCentroidLabels();
+    drawBoundaries();
+  }
 }
 
 main();

@@ -196,6 +196,14 @@ canvas#view {
 }
 canvas#view:active { cursor: grabbing; }
 
+#boundaries-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 #coord-readout {
   position: absolute;
   left: .75rem;
@@ -379,16 +387,30 @@ canvas#view:active { cursor: grabbing; }
 }
 #clump-list button {
   min-height: 30px;
-  padding: .2rem;
+  padding: .2rem .3rem;
   font-size: .82rem;
   font-family: SFMono-Regular, Consolas, monospace;
   font-weight: 680;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  color: var(--teal);
+}
+#clump-list .jellyfish {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+#clump-list button > span {
+  color: var(--ink);
 }
 #clump-list button[aria-pressed="true"] {
   background: var(--orange);
   border-color: var(--orange);
   color: #fff;
 }
+#clump-list button[aria-pressed="true"] > span { color: #fff; }
 
 /* Rail collapse button ---------------------------------------------------- */
 .rail-toggle {

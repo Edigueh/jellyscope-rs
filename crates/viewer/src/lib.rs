@@ -1,7 +1,6 @@
 //! Jellyscope WebGL viewer (WASM). JS drives it: construct with a canvas id,
-//! push a baked RGBA texture and clump boundaries, then call `render` on
-//! pan/zoom. All heavy science is pre-baked; this crate only samples textures,
-//! moves the camera, and draws overlay lines.
+//! push filter planes, then call `render_single`/`render_rgb`. Boundaries are
+//! drawn by a separate JS Canvas 2D overlay (thick + smoothed), not here.
 //!
 //! `unsafe` is confined to the `Float32Array::view` FFI sites in `gl.rs`.
 //
@@ -24,25 +23,11 @@ mod gl;
 use camera::Camera;
 use gl::{ImageProgram, OverlayProgram};
 use jelly_core::{composite, stretch};
-use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as Gl, WebGlVertexArrayObject as Vao};
 
-// Default boundary colour is white; user picks any RGB at runtime via
-// `Viewer::set_boundary_color`. Selected boundaries stay hardcoded in the
-// radialpaths --orange so selection reads clearly against any user colour.
-const CLUMP_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-const CLUMP_SELECTED: [f32; 4] = [0.836, 0.369, 0.0, 1.0];
-// Centroid markers reuse the overlay shader; --teal for parity with the
-// clump-list "inside" accent.
+// Centroid markers use the overlay shader; --teal for parity with radialpaths.
 const CENTROID_COLOR: [f32; 4] = [0.165, 0.616, 0.561, 1.0];
-
-/// One clump's vertex range within the overlay buffer, as `LINE_STRIP`.
-struct Segment {
-    id: i64,
-    start: i32,
-    count: i32,
-}
 
 #[wasm_bindgen]
 pub struct Viewer {
@@ -50,15 +35,11 @@ pub struct Viewer {
     image: ImageProgram,
     overlay: OverlayProgram,
     image_vao: Vao,
-    overlay_vao: Vao,
     centroid_vao: Vao,
     camera: Camera,
     /// 0 = pass-through RGB (composite); 1..=6 = colormap applied to luminance.
     colormap_id: i32,
     canvas: HtmlCanvasElement,
-    segments: Vec<Segment>,
-    selected: HashSet<i64>,
-    boundary_color: [f32; 4],
     show_centroids: bool,
     n_centroids: i32,
     // Raw flux planes (f64, row-major ny*nx), one per filter index. The viewer
@@ -69,8 +50,6 @@ pub struct Viewer {
     // GL buffers kept alive for the viewer's lifetime; never read directly.
     #[allow(dead_code)]
     quad_buf: web_sys::WebGlBuffer,
-    #[allow(dead_code)]
-    overlay_buf: Option<web_sys::WebGlBuffer>,
     #[allow(dead_code)]
     centroid_buf: Option<web_sys::WebGlBuffer>,
 }
@@ -103,9 +82,6 @@ impl Viewer {
         let quad: [f32; 12] = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0];
         let quad_buf = gl::upload_verts(&gl, &quad)?;
 
-        let overlay_vao = gl
-            .create_vertex_array()
-            .ok_or_else(|| JsValue::from_str("vao"))?;
         let centroid_vao = gl
             .create_vertex_array()
             .ok_or_else(|| JsValue::from_str("vao"))?;
@@ -115,21 +91,16 @@ impl Viewer {
             image,
             overlay,
             image_vao,
-            overlay_vao,
             centroid_vao,
             camera: Camera::new(1, 1),
             colormap_id: 1,
             canvas,
-            segments: Vec::new(),
-            selected: HashSet::new(),
-            boundary_color: CLUMP_COLOR,
             show_centroids: false,
             n_centroids: 0,
             planes: Vec::new(),
             nx: 0,
             ny: 0,
             quad_buf,
-            overlay_buf: None,
             centroid_buf: None,
         })
     }
@@ -237,49 +208,6 @@ impl Viewer {
         Ok(())
     }
 
-    /// Set clump boundaries. `verts` is flat image-space `x,y` pairs; `counts`
-    /// gives each clump's vertex count in order; `ids` the matching clump ids.
-    /// Consecutive vertices of one clump form a closed `LINE_STRIP`.
-    pub fn set_boundaries(
-        &mut self,
-        verts: &[f32],
-        counts: &[i32],
-        ids: &[i64],
-    ) -> Result<(), JsValue> {
-        self.gl.bind_vertex_array(Some(&self.overlay_vao));
-        self.overlay_buf = Some(gl::upload_verts(&self.gl, verts)?);
-
-        let mut segments = Vec::with_capacity(counts.len());
-        let mut start = 0_i32;
-        for (count, &id) in counts.iter().zip(ids) {
-            segments.push(Segment {
-                id,
-                start,
-                count: *count,
-            });
-            start += count;
-        }
-        self.segments = segments;
-        self.render();
-        Ok(())
-    }
-
-    /// Replace the selected clump set. Pass an empty slice to clear.
-    #[wasm_bindgen(js_name = setSelected)]
-    pub fn set_selected(&mut self, ids: &[i64]) {
-        self.selected.clear();
-        self.selected.extend(ids.iter().copied());
-        self.render();
-    }
-
-    /// Override the non-selected clump boundary colour. Components in `[0,1]`.
-    /// Selected clumps stay orange so selection is always visible.
-    #[wasm_bindgen(js_name = setBoundaryColor)]
-    pub fn set_boundary_color(&mut self, r: f32, g: f32, b: f32) {
-        self.boundary_color = [r, g, b, 1.0];
-        self.render();
-    }
-
     /// Upload centroid positions (flat `x,y` pairs in image space) to a
     /// dedicated VAO. Rendered as `GL_POINTS` when `show_centroids` is on.
     #[wasm_bindgen(js_name = setCentroids)]
@@ -347,8 +275,8 @@ impl Viewer {
             .to_vec()
     }
 
-    /// Canvas pixel at an image point — JS uses this to place DOM overlays
-    /// (centroid labels) that track pan/zoom.
+    /// Canvas pixel at an image point — JS uses this to place DOM/Canvas 2D
+    /// overlays (centroid labels, clump boundaries) that track pan/zoom.
     #[wasm_bindgen(js_name = imageToCanvas)]
     #[must_use]
     pub fn image_to_canvas(&self, ix: f64, iy: f64) -> Vec<f64> {
@@ -381,28 +309,6 @@ impl Viewer {
         g.uniform1i(Some(&self.image.u_tex), 0);
         g.uniform1i(Some(&self.image.u_colormap), self.colormap_id);
         g.draw_arrays(Gl::TRIANGLES, 0, 6);
-
-        // Clump boundaries (selected drawn last, on top, in orange).
-        if !self.segments.is_empty() {
-            g.use_program(Some(&self.overlay.program));
-            g.bind_vertex_array(Some(&self.overlay_vao));
-            g.uniform_matrix3fv_with_f32_array(Some(&self.overlay.u_view), false, &m);
-            for seg in &self.segments {
-                if self.selected.contains(&seg.id) {
-                    continue;
-                }
-                g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &self.boundary_color);
-                g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
-            }
-            for seg in self
-                .segments
-                .iter()
-                .filter(|s| self.selected.contains(&s.id))
-            {
-                g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_SELECTED);
-                g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
-            }
-        }
 
         // Centroid markers (GL_POINTS, size set in the overlay vertex shader).
         if self.show_centroids && self.n_centroids > 0 {
