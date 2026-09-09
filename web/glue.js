@@ -279,10 +279,8 @@ function pushCentroids() {
 
 function ensureCentroidLabels() {
   const container = $("centroid-labels");
-  const clumps = state.cube.clumps;
-  if (container.childElementCount === clumps.length) return;
   container.innerHTML = "";
-  for (const cl of clumps) {
+  for (const cl of state.cube.clumps) {
     const el = document.createElement("span");
     el.className = "centroid-label";
     el.textContent = `#${cl.id}`;
