@@ -30,7 +30,6 @@ const state = {
   selected: new Set(),     // Set<bigint> of clump ids
   mode: "single",           // "single" | "rgb"
   dragMode: "pan",          // "pan" | "rect" | "lasso"
-  filterMode: "all",        // "all" | "inside" | "outside"
   rgbR: 0, rgbG: 0, rgbB: 0,
   rgbDeltaRG: null, rgbDeltaGB: null,
   rgbQ: 8,
@@ -84,10 +83,6 @@ async function main() {
   for (const btn of document.querySelectorAll('[data-drag]')) {
     btn.addEventListener("click", () => setDragMode(btn.dataset.drag));
   }
-  $("clump-filter").addEventListener("change", (e) => {
-    state.filterMode = e.target.value;
-    renderClumpList();
-  });
   $("rail-toggle").addEventListener("click", toggleRail);
 
   bindPointer();
@@ -627,22 +622,18 @@ function renderProperties() {
     const cl = sel[0];
     rows = {
       ID: cl.id,
-      Component: cl.component,
       "Area (pix)": cl.area_pix,
       "Area (kpc²)": cl.area_kpc2.toFixed(3),
       "r_eff (kpc)": fmt(cl.r_eff_kpc),
       RA: `${cl.ra_deg.toFixed(6)}°`,
       Dec: `${cl.dec_deg.toFixed(6)}°`,
-      Inside: cl.inside ? "yes" : "no",
     };
   } else {
     const totalArea = sel.reduce((s, c) => s + (c.area_kpc2 ?? 0), 0);
     const withReff = sel.filter((c) => c.r_eff_kpc);
     const meanReff = withReff.length ? withReff.reduce((s, c) => s + c.r_eff_kpc, 0) / withReff.length : null;
-    const insideN = sel.filter((c) => c.inside).length;
     rows = {
       Selected: sel.length,
-      Inside: `${insideN} / ${sel.length}`,
       "Total area (kpc²)": totalArea.toFixed(3),
       "Mean r_eff (kpc)": meanReff != null ? meanReff.toFixed(3) : "—",
     };
@@ -678,19 +669,15 @@ function renderSeparations() {
 function renderClumpList() {
   const ul = $("clump-list");
   ul.innerHTML = "";
-  const filter = state.filterMode;
-  const list = state.cube.clumps
-    .filter((c) => filter === "all" || (filter === "inside" ? c.inside : !c.inside))
-    .sort((a, b) => a.id - b.id);
+  const list = state.cube.clumps.slice().sort((a, b) => a.id - b.id);
   for (const cl of list) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = cl.inside ? "inside" : "outside";
     btn.textContent = `#${cl.id}`;
     btn.dataset.id = String(cl.id);
     btn.setAttribute("aria-pressed", state.selected.has(BigInt(cl.id)));
-    btn.title = `Clump ${cl.id} · ${cl.inside ? "disk" : "outside"} · ${cl.area_kpc2.toFixed(2)} kpc²`;
+    btn.title = `Clump ${cl.id} · ${cl.area_kpc2.toFixed(2)} kpc²`;
     btn.addEventListener("click", (e) => toggleClump(cl.id, selectionMode(e)));
     li.append(btn);
     ul.append(li);

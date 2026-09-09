@@ -347,8 +347,6 @@ canvas#view:active { cursor: grabbing; }
 #seps thead th { color: var(--muted); font-weight: 680; font-family: inherit; }
 #seps .empty { color: var(--muted); text-align: left; font-family: inherit; }
 
-#clump-filter { width: 100%; margin-bottom: .5rem; }
-
 #clump-list {
   list-style: none;
   padding: 0;
@@ -364,8 +362,6 @@ canvas#view:active { cursor: grabbing; }
   font-family: SFMono-Regular, Consolas, monospace;
   font-weight: 680;
 }
-#clump-list button.inside  { border-color: var(--teal); }
-#clump-list button.outside { border-color: var(--gold); }
 #clump-list button[aria-pressed="true"] {
   background: var(--orange);
   border-color: var(--orange);
