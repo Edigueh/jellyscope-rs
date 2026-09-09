@@ -347,6 +347,18 @@ impl Viewer {
             .to_vec()
     }
 
+    /// Canvas pixel at an image point — JS uses this to place DOM overlays
+    /// (centroid labels) that track pan/zoom.
+    #[wasm_bindgen(js_name = imageToCanvas)]
+    #[must_use]
+    pub fn image_to_canvas(&self, ix: f64, iy: f64) -> Vec<f64> {
+        let (w, h) = (
+            f64::from(self.canvas.width()),
+            f64::from(self.canvas.height()),
+        );
+        self.camera.image_to_canvas(ix, iy, w, h).to_vec()
+    }
+
     pub fn render(&self) {
         let (w, h) = (
             f64::from(self.canvas.width()),

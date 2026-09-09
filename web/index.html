@@ -81,7 +81,9 @@
       <div class="canvas-wrap">
         <canvas id="view"></canvas>
         <div class="drag-overlay" id="drag-overlay">
-          <svg class="drag-lasso" id="drag-lasso" xmlns="http://www.w3.org/2000/svg"></svg>
+          <svg class="drag-lasso" id="drag-lasso"
+               xmlns="http://www.w3.org/2000/svg"
+               preserveAspectRatio="none"></svg>
         </div>
         <div class="colorbar" id="colorbar">
           <div class="colorbar-title">Flux (stretched)</div>
@@ -92,6 +94,7 @@
             <div class="colorbar-strip" id="colorbar-strip"></div>
           </div>
         </div>
+        <div class="centroid-labels" id="centroid-labels" aria-hidden="true" hidden></div>
         <div id="coord-readout" class="italic"></div>
         <button type="button" class="rail-toggle" id="rail-toggle" title="Toggle rail ( [ / ] )">›</button>
       </div>

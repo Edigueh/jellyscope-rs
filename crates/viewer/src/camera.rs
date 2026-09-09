@@ -123,6 +123,16 @@ impl Camera {
             self.center[1] - (canvas_y - ch / 2.0) / self.zoom,
         ]
     }
+
+    /// Image pixel → canvas pixel. Forward map used for placing DOM overlays
+    /// (centroid labels) that must track pan/zoom. Inverse of `canvas_to_image`.
+    #[must_use]
+    pub fn image_to_canvas(&self, ix: f64, iy: f64, cw: f64, ch: f64) -> [f64; 2] {
+        [
+            cw / 2.0 + (ix - self.center[0]) * self.zoom,
+            ch / 2.0 - (iy - self.center[1]) * self.zoom,
+        ]
+    }
 }
 
 #[cfg(test)]
@@ -257,5 +267,22 @@ mod tests {
         let img = c.canvas_to_image(300.0, 200.0, 600.0, 400.0);
         assert!((img[0] - 50.0).abs() < 1e-9, "x center after refit");
         assert!((img[1] - 40.0).abs() < 1e-9, "y center after refit");
+    }
+
+    #[test]
+    fn image_to_canvas_roundtrips() {
+        // image_to_canvas is the forward inverse of canvas_to_image; the two
+        // must round-trip so DOM overlays (centroid labels) land on the same
+        // pixels the WebGL centroid draws.
+        let mut c = Camera::new(500, 400);
+        c.fit(1000.0, 800.0);
+        c.zoom = 2.5;
+        c.center = [220.0, 175.0];
+        for (ix, iy) in [(50.0, 60.0), (250.0, 200.0), (499.0, 0.0), (10.5, 391.7)] {
+            let [cx, cy] = c.image_to_canvas(ix, iy, 1000.0, 800.0);
+            let back = c.canvas_to_image(cx, cy, 1000.0, 800.0);
+            assert!((back[0] - ix).abs() < 1e-9, "x drift {back:?}");
+            assert!((back[1] - iy).abs() < 1e-9, "y drift {back:?}");
+        }
     }
 }

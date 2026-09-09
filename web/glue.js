@@ -73,6 +73,8 @@ async function main() {
   });
   $("centroids").addEventListener("change", (e) => {
     state.viewer.setShowCentroids(e.target.checked);
+    $("centroid-labels").hidden = !e.target.checked;
+    if (e.target.checked) positionCentroidLabels();
   });
   $("clear-selection").addEventListener("click", () => setSelection(new Set()));
 
@@ -270,6 +272,38 @@ function pushCentroids() {
   });
   state.viewer.setCentroids(xs);
   state.viewer.setShowCentroids($("centroids").checked);
+  ensureCentroidLabels();
+  $("centroid-labels").hidden = !$("centroids").checked;
+  positionCentroidLabels();
+}
+
+function ensureCentroidLabels() {
+  const container = $("centroid-labels");
+  const clumps = state.cube.clumps;
+  if (container.childElementCount === clumps.length) return;
+  container.innerHTML = "";
+  for (const cl of clumps) {
+    const el = document.createElement("span");
+    el.className = "centroid-label";
+    el.textContent = `#${cl.id}`;
+    el.dataset.x = cl.x0;
+    el.dataset.y = cl.y0;
+    container.append(el);
+  }
+}
+
+function positionCentroidLabels() {
+  const container = $("centroid-labels");
+  if (container.hidden) return;
+  const dpr = window.devicePixelRatio || 1;
+  for (const el of container.children) {
+    const [cx, cy] = state.viewer.imageToCanvas(
+      parseFloat(el.dataset.x),
+      parseFloat(el.dataset.y),
+    );
+    el.style.left = (cx / dpr) + "px";
+    el.style.top  = (cy / dpr) + "px";
+  }
 }
 
 function renderImage() {
@@ -450,6 +484,7 @@ function bindPointer() {
     if (dragging) {
       moved = true;
       state.viewer.pan((e.offsetX - last[0]) * dpr, (e.offsetY - last[1]) * dpr);
+      positionCentroidLabels();
       last = [e.offsetX, e.offsetY];
     } else if (state.dragMode === "pan") {
       canvas.style.cursor = clumpAt(e.offsetX, e.offsetY) >= 0 ? "pointer" : "grab";
@@ -461,6 +496,7 @@ function bindPointer() {
     const dpr = window.devicePixelRatio || 1;
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     state.viewer.zoom(factor, e.offsetX * dpr, e.offsetY * dpr);
+    positionCentroidLabels();
   }, { passive: false });
 }
 
