@@ -4,79 +4,115 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Jellyscope</title>
+    <link rel="preconnect" href="https://rsms.me/" />
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header>
+    <header class="topbar">
       <h1>Jellyscope</h1>
-      <span class="sub">JWST jellyfish galaxy datacubes</span>
+      <span class="italic sub">JWST datacubes · clump explorer</span>
     </header>
 
-    <div id="layout">
-      <aside id="controls">
-        <label>Dataset<select id="dataset"></select></label>
-        <label>Datacube<select id="cube"></select></label>
+    <div class="toolbar" role="toolbar" aria-label="View controls">
+      <div class="cluster">
+        <label>Dataset <select id="dataset"></select></label>
+        <label>Datacube <select id="cube"></select></label>
+      </div>
 
-        <fieldset>
-          <legend>View</legend>
-          <label><input type="radio" name="mode" value="single" checked /> Single filter</label>
-          <label><input type="radio" name="mode" value="rgb" /> RGB composite</label>
-        </fieldset>
-
-        <div id="single-controls">
-          <label>Filter
-            <input type="range" id="filter" min="0" max="0" step="1" value="0" />
-            <span id="filter-label"></span>
-          </label>
-          <label>Stretch
-            <select id="stretch">
-              <option value="asinh">asinh</option>
-              <option value="log">log</option>
-            </select>
-          </label>
-          <label>Colors
-            <select id="colorscale">
-              <option value="1" selected>Viridis</option>
-              <option value="2">Inferno</option>
-              <option value="3">Plasma</option>
-              <option value="4">Cividis</option>
-              <option value="5">Hot</option>
-              <option value="6">Greys</option>
-            </select>
-          </label>
+      <div class="cluster">
+        <div class="seg" role="group" aria-label="View mode">
+          <button type="button" data-mode="single" aria-pressed="true">Single</button>
+          <button type="button" data-mode="rgb" aria-pressed="false">RGB</button>
         </div>
+      </div>
 
-        <div id="rgb-controls" hidden>
-          <label>R<select id="rgb-r"></select></label>
-          <label>G<select id="rgb-g"></select></label>
-          <label>B<select id="rgb-b"></select></label>
-          <label>Recipe
-            <select id="rgb-method">
-              <option value="percentile">percentile-asinh</option>
-              <option value="lupton">Lupton</option>
-            </select>
-          </label>
-          <label id="rgb-q-wrap" hidden>Q
-            <input type="range" id="rgb-q" min="1" max="30" step="0.5" value="8" />
-            <span id="rgb-q-label">8.0</span>
-          </label>
+      <div class="cluster" id="single-controls">
+        <label>Filter
+          <input type="range" id="filter" min="0" max="0" step="1" value="0" />
+        </label>
+        <span class="name-tag" id="filter-label">—</span>
+        <label>Stretch
+          <select id="stretch">
+            <option value="asinh">asinh</option>
+            <option value="log">log</option>
+          </select>
+        </label>
+        <label>Colors
+          <select id="colorscale">
+            <option value="1" selected>Viridis</option>
+            <option value="2">Inferno</option>
+            <option value="3">Plasma</option>
+            <option value="4">Cividis</option>
+            <option value="5">Hot</option>
+            <option value="6">Greys</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="cluster" id="rgb-controls" hidden>
+        <label>R <select id="rgb-r"></select></label>
+        <label>G <select id="rgb-g"></select></label>
+        <label>B <select id="rgb-b"></select></label>
+        <label>Recipe
+          <select id="rgb-method">
+            <option value="percentile">percentile-asinh</option>
+            <option value="lupton">Lupton</option>
+          </select>
+        </label>
+        <label id="rgb-q-wrap" hidden>Q
+          <input type="range" id="rgb-q" min="1" max="30" step="0.5" value="8" />
+          <span class="name-tag" id="rgb-q-label">8.0</span>
+        </label>
+      </div>
+
+      <div class="cluster">
+        <div class="seg" role="group" aria-label="Drag tool">
+          <button type="button" data-drag="pan" aria-pressed="true" title="Pan (P)">Pan</button>
+          <button type="button" data-drag="rect" aria-pressed="false" title="Rect select (T)">Rect</button>
+          <button type="button" data-drag="lasso" aria-pressed="false" title="Lasso select (L)">Lasso</button>
         </div>
+      </div>
 
-        <label><input type="checkbox" id="boundaries" checked /> Clump boundaries</label>
-
-        <div id="panel">
-          <h2>Clump</h2>
-          <p id="panel-empty">Click a clump to inspect it.</p>
-          <dl id="panel-props" hidden></dl>
-        </div>
-
-        <p id="readout"></p>
-      </aside>
-
-      <main>
-        <canvas id="view"></canvas>
-      </main>
+      <div class="cluster">
+        <label><input type="checkbox" id="boundaries" checked /> Boundaries</label>
+        <button type="button" class="link" id="clear-selection" title="Clear selection (Esc)">Clear</button>
+      </div>
     </div>
+
+    <main class="grid" id="grid">
+      <div class="canvas-wrap">
+        <canvas id="view"></canvas>
+        <div class="drag-overlay" id="drag-overlay">
+          <svg class="drag-lasso" id="drag-lasso" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div id="coord-readout" class="italic"></div>
+        <button type="button" class="rail-toggle" id="rail-toggle" title="Toggle rail ( [ / ] )">›</button>
+      </div>
+
+      <aside class="rail" id="rail" aria-label="Clump inspector">
+        <section class="section" id="sec-props">
+          <h3>Properties</h3>
+          <p id="panel-empty">Click, rect, or lasso a clump to inspect. Shift-click adds; Alt-click removes.</p>
+          <dl id="panel-props" hidden></dl>
+        </section>
+
+        <section class="section" id="sec-seps">
+          <h3>Separations</h3>
+          <table id="seps"><tbody><tr><td class="empty">Select two or more clumps.</td></tr></tbody></table>
+        </section>
+
+        <section class="section" id="sec-clumps">
+          <h3>Clumps</h3>
+          <select id="clump-filter" aria-label="Filter clumps">
+            <option value="all" selected>All</option>
+            <option value="inside">Disk</option>
+            <option value="outside">Outside</option>
+          </select>
+          <ul id="clump-list" role="listbox" aria-multiselectable="true"></ul>
+        </section>
+      </aside>
+    </main>
 
     <script type="module" src="glue.js"></script>
   </body>

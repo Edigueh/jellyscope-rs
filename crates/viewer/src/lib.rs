@@ -24,13 +24,14 @@ mod gl;
 use camera::Camera;
 use gl::{ImageProgram, OverlayProgram};
 use jelly_core::{composite, stretch};
+use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as Gl, WebGlVertexArrayObject as Vao};
 
-// Clump boundary colours, matching the Python `image_viewer.py` (#00ccff /
-// #ff4444) as normalized RGBA.
-const CLUMP_COLOR: [f32; 4] = [0.0, 0.8, 1.0, 1.0];
-const CLUMP_SELECTED: [f32; 4] = [1.0, 0.267, 0.267, 1.0];
+// Clump boundary colours in the radialpaths palette: --blue (#275a85) for
+// unselected clumps, --orange (#d55e00) for the selected set.
+const CLUMP_COLOR: [f32; 4] = [0.153, 0.353, 0.522, 1.0];
+const CLUMP_SELECTED: [f32; 4] = [0.836, 0.369, 0.0, 1.0];
 
 /// One clump's vertex range within the overlay buffer, as `LINE_STRIP`.
 struct Segment {
@@ -51,7 +52,7 @@ pub struct Viewer {
     colormap_id: i32,
     canvas: HtmlCanvasElement,
     segments: Vec<Segment>,
-    selected: Option<i64>,
+    selected: HashSet<i64>,
     // Raw flux planes (f64, row-major ny*nx), one per filter index. The viewer
     // stretches/composites these live; nothing is pre-baked.
     planes: Vec<Vec<f64>>,
@@ -106,7 +107,7 @@ impl Viewer {
             colormap_id: 1,
             canvas,
             segments: Vec::new(),
-            selected: None,
+            selected: HashSet::new(),
             planes: Vec::new(),
             nx: 0,
             ny: 0,
@@ -245,9 +246,11 @@ impl Viewer {
         Ok(())
     }
 
-    /// Highlight the clump with this id (red); pass a negative id to clear.
-    pub fn set_selected(&mut self, id: i64) {
-        self.selected = (id >= 0).then_some(id);
+    /// Replace the selected clump set. Pass an empty slice to clear.
+    #[wasm_bindgen(js_name = setSelected)]
+    pub fn set_selected(&mut self, ids: &[i64]) {
+        self.selected.clear();
+        self.selected.extend(ids.iter().copied());
         self.render();
     }
 
@@ -319,23 +322,25 @@ impl Viewer {
         g.uniform1i(Some(&self.image.u_colormap), self.colormap_id);
         g.draw_arrays(Gl::TRIANGLES, 0, 6);
 
-        // Clump boundaries (selected drawn last, on top, in red).
+        // Clump boundaries (selected drawn last, on top, in orange).
         if !self.segments.is_empty() {
             g.use_program(Some(&self.overlay.program));
             g.bind_vertex_array(Some(&self.overlay_vao));
             g.uniform_matrix3fv_with_f32_array(Some(&self.overlay.u_view), false, &m);
             for seg in &self.segments {
-                if Some(seg.id) == self.selected {
+                if self.selected.contains(&seg.id) {
                     continue;
                 }
                 g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_COLOR);
                 g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
             }
-            if let Some(sel) = self.selected {
-                for seg in self.segments.iter().filter(|s| s.id == sel) {
-                    g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_SELECTED);
-                    g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
-                }
+            for seg in self
+                .segments
+                .iter()
+                .filter(|s| self.selected.contains(&s.id))
+            {
+                g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_SELECTED);
+                g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
             }
         }
     }

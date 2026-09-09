@@ -20,9 +20,15 @@ fmt:
 bake *ARGS:
     cargo run -p bake -- {{ARGS}}
 
-# Static-serve the repo root so the browser can reach web/ and dist/.
+# Static-serve web/ so paths line up with the GH Pages deploy layout:
+# _site/ = web/* + dist/, meaning glue.js's `new URL("dist/", import.meta.url)`
+# resolves to /dist/. A symlink `web/dist -> ../dist` lets `just serve`
+# match without duplicating data.
 serve port="8000":
-    python3 -m http.server {{port}}
+    #!/usr/bin/env sh
+    set -e
+    if [ ! -e web/dist ]; then ln -s ../dist web/dist; fi
+    cd web && python3 -m http.server {{port}}
 
 # Confirm the viewer crate still compiles to wasm.
 wasm:

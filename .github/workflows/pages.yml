@@ -1,0 +1,65 @@
+name: Deploy to Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.100
+
+      - name: Build viewer WASM
+        run: |
+          cargo build -p viewer --target wasm32-unknown-unknown --release
+          wasm-bindgen target/wasm32-unknown-unknown/release/viewer.wasm \
+            --out-dir web/pkg --target web --no-typescript
+
+      - name: Fetch data release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(cat .data-version)
+          gh release download "$TAG" -R "${{ github.repository }}" -p 'dist.tar.gz'
+          tar xzf dist.tar.gz
+
+      - name: Assemble _site
+        run: |
+          mkdir -p _site
+          cp -r web/. _site/
+          rm -f _site/dist
+          cp -r dist _site/dist
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
