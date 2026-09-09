@@ -65,6 +65,10 @@ async function main() {
     renderImage();
   });
   $("boundaries").addEventListener("change", applyBoundaries);
+  $("boundary-color").addEventListener("input", (e) => {
+    const [r, g, b] = hexToRgb(e.target.value);
+    state.viewer.setBoundaryColor(r, g, b);
+  });
   $("clear-selection").addEventListener("click", () => setSelection(new Set()));
 
   // Segmented buttons: view mode + drag tool.
@@ -83,7 +87,52 @@ async function main() {
   bindPointer();
   bindDragOverlay();
   bindKeyboard();
+  bindSplitters();
   onDatasetChange();
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.replace(/^#/, ""), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+// ── Splitters ────────────────────────────────────────────────────────────────
+
+function bindSplitters() {
+  bindSplitter($("split-x"), "x", "--rail-w", {
+    min: 240,
+    max: () => window.innerWidth - 320,
+    invert: true, // dragging left widens the rail
+  });
+  bindSplitter($("split-y"), "y", "--top-h", {
+    min: 90,
+    max: () => window.innerHeight - 200,
+  });
+}
+
+function bindSplitter(el, axis, cssVar, { min, max, invert = false }) {
+  const root = document.documentElement;
+  let startPos = 0, startVal = 0;
+  const onMove = (e) => {
+    const p = axis === "x" ? e.clientX : e.clientY;
+    const delta = invert ? startPos - p : p - startPos;
+    const next = Math.max(min, Math.min(max(), startVal + delta));
+    root.style.setProperty(cssVar, next + "px");
+    resizeCanvas();
+  };
+  const onUp = () => {
+    el.classList.remove("dragging");
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  el.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    el.classList.add("dragging");
+    startPos = axis === "x" ? e.clientX : e.clientY;
+    startVal = parseFloat(getComputedStyle(root).getPropertyValue(cssVar));
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
 }
 
 // ── UI helpers ───────────────────────────────────────────────────────────────

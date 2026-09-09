@@ -9,76 +9,82 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <h1>Jellyscope</h1>
-      <span class="italic sub">JWST datacubes · clump explorer</span>
-    </header>
+    <div class="top-block">
+      <header class="topbar">
+        <h1>Jellyscope</h1>
+        <span class="italic sub">JWST datacubes · clump explorer</span>
+      </header>
 
-    <div class="toolbar" role="toolbar" aria-label="View controls">
-      <div class="cluster">
-        <label>Dataset <select id="dataset"></select></label>
-        <label>Datacube <select id="cube"></select></label>
-      </div>
-
-      <div class="cluster">
-        <div class="seg" role="group" aria-label="View mode">
-          <button type="button" data-mode="single" aria-pressed="true">Single</button>
-          <button type="button" data-mode="rgb" aria-pressed="false">RGB</button>
+      <div class="toolbar" role="toolbar" aria-label="View controls">
+        <div class="cluster">
+          <label>Dataset <select id="dataset"></select></label>
+          <label>Datacube <select id="cube"></select></label>
         </div>
-      </div>
 
-      <div class="cluster" id="single-controls">
-        <label>Filter
-          <input type="range" id="filter" min="0" max="0" step="1" value="0" />
-        </label>
-        <span class="name-tag" id="filter-label">—</span>
-        <label>Stretch
-          <select id="stretch">
-            <option value="asinh">asinh</option>
-            <option value="log">log</option>
-          </select>
-        </label>
-        <label>Colors
-          <select id="colorscale">
-            <option value="1" selected>Viridis</option>
-            <option value="2">Inferno</option>
-            <option value="3">Plasma</option>
-            <option value="4">Cividis</option>
-            <option value="5">Hot</option>
-            <option value="6">Greys</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="cluster" id="rgb-controls" hidden>
-        <label>R <select id="rgb-r"></select></label>
-        <label>G <select id="rgb-g"></select></label>
-        <label>B <select id="rgb-b"></select></label>
-        <label>Recipe
-          <select id="rgb-method">
-            <option value="percentile">percentile-asinh</option>
-            <option value="lupton">Lupton</option>
-          </select>
-        </label>
-        <label id="rgb-q-wrap" hidden>Q
-          <input type="range" id="rgb-q" min="1" max="30" step="0.5" value="8" />
-          <span class="name-tag" id="rgb-q-label">8.0</span>
-        </label>
-      </div>
-
-      <div class="cluster">
-        <div class="seg" role="group" aria-label="Drag tool">
-          <button type="button" data-drag="pan" aria-pressed="true" title="Pan (P)">Pan</button>
-          <button type="button" data-drag="rect" aria-pressed="false" title="Rect select (T)">Rect</button>
-          <button type="button" data-drag="lasso" aria-pressed="false" title="Lasso select (L)">Lasso</button>
+        <div class="cluster">
+          <div class="seg" role="group" aria-label="View mode">
+            <button type="button" data-mode="single" aria-pressed="true">Single</button>
+            <button type="button" data-mode="rgb" aria-pressed="false">RGB</button>
+          </div>
         </div>
-      </div>
 
-      <div class="cluster">
-        <label><input type="checkbox" id="boundaries" checked /> Boundaries</label>
-        <button type="button" class="link" id="clear-selection" title="Clear selection (Esc)">Clear</button>
+        <div class="cluster" id="single-controls">
+          <label>Filter
+            <input type="range" id="filter" min="0" max="0" step="1" value="0" />
+          </label>
+          <span class="name-tag" id="filter-label">—</span>
+          <label>Stretch
+            <select id="stretch">
+              <option value="asinh">asinh</option>
+              <option value="log">log</option>
+            </select>
+          </label>
+          <label>Colors
+            <select id="colorscale">
+              <option value="1" selected>Viridis</option>
+              <option value="2">Inferno</option>
+              <option value="3">Plasma</option>
+              <option value="4">Cividis</option>
+              <option value="5">Hot</option>
+              <option value="6">Greys</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="cluster" id="rgb-controls" hidden>
+          <label>R <select id="rgb-r"></select></label>
+          <label>G <select id="rgb-g"></select></label>
+          <label>B <select id="rgb-b"></select></label>
+          <label>Recipe
+            <select id="rgb-method">
+              <option value="percentile">percentile-asinh</option>
+              <option value="lupton">Lupton</option>
+            </select>
+          </label>
+          <label id="rgb-q-wrap" hidden>Q
+            <input type="range" id="rgb-q" min="1" max="30" step="0.5" value="8" />
+            <span class="name-tag" id="rgb-q-label">8.0</span>
+          </label>
+        </div>
+
+        <div class="cluster">
+          <div class="seg" role="group" aria-label="Drag tool">
+            <button type="button" data-drag="pan" aria-pressed="true" title="Pan (P)">Pan</button>
+            <button type="button" data-drag="rect" aria-pressed="false" title="Rect select (T)">Rect</button>
+            <button type="button" data-drag="lasso" aria-pressed="false" title="Lasso select (L)">Lasso</button>
+          </div>
+        </div>
+
+        <div class="cluster">
+          <label><input type="checkbox" id="boundaries" checked /> Boundaries</label>
+          <label>Color <input type="color" id="boundary-color" value="#ffffff" /></label>
+          <button type="button" class="link" id="clear-selection" title="Clear selection (Esc)">Clear</button>
+        </div>
       </div>
     </div>
+
+    <div class="split-y" id="split-y" role="separator" aria-orientation="horizontal"
+         aria-label="Resize toolbar area" tabindex="0"></div>
 
     <main class="grid" id="grid">
       <div class="canvas-wrap">
@@ -89,6 +95,9 @@
         <div id="coord-readout" class="italic"></div>
         <button type="button" class="rail-toggle" id="rail-toggle" title="Toggle rail ( [ / ] )">›</button>
       </div>
+
+      <div class="split-x" id="split-x" role="separator" aria-orientation="vertical"
+           aria-label="Resize rail" tabindex="0"></div>
 
       <aside class="rail" id="rail" aria-label="Clump inspector">
         <section class="section" id="sec-props">

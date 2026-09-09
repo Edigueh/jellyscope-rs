@@ -28,9 +28,10 @@ use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as Gl, WebGlVertexArrayObject as Vao};
 
-// Clump boundary colours in the radialpaths palette: --blue (#275a85) for
-// unselected clumps, --orange (#d55e00) for the selected set.
-const CLUMP_COLOR: [f32; 4] = [0.153, 0.353, 0.522, 1.0];
+// Default boundary colour is white; user picks any RGB at runtime via
+// `Viewer::set_boundary_color`. Selected boundaries stay hardcoded in the
+// radialpaths --orange so selection reads clearly against any user colour.
+const CLUMP_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const CLUMP_SELECTED: [f32; 4] = [0.836, 0.369, 0.0, 1.0];
 
 /// One clump's vertex range within the overlay buffer, as `LINE_STRIP`.
@@ -53,6 +54,7 @@ pub struct Viewer {
     canvas: HtmlCanvasElement,
     segments: Vec<Segment>,
     selected: HashSet<i64>,
+    boundary_color: [f32; 4],
     // Raw flux planes (f64, row-major ny*nx), one per filter index. The viewer
     // stretches/composites these live; nothing is pre-baked.
     planes: Vec<Vec<f64>>,
@@ -108,6 +110,7 @@ impl Viewer {
             canvas,
             segments: Vec::new(),
             selected: HashSet::new(),
+            boundary_color: CLUMP_COLOR,
             planes: Vec::new(),
             nx: 0,
             ny: 0,
@@ -254,6 +257,14 @@ impl Viewer {
         self.render();
     }
 
+    /// Override the non-selected clump boundary colour. Components in `[0,1]`.
+    /// Selected clumps stay orange so selection is always visible.
+    #[wasm_bindgen(js_name = setBoundaryColor)]
+    pub fn set_boundary_color(&mut self, r: f32, g: f32, b: f32) {
+        self.boundary_color = [r, g, b, 1.0];
+        self.render();
+    }
+
     /// Match the drawing-buffer size to the canvas CSS size (device pixels).
     pub fn resize(&mut self, width: u32, height: u32) {
         self.canvas.set_width(width);
@@ -272,7 +283,11 @@ impl Viewer {
     }
 
     pub fn pan(&mut self, dx: f64, dy: f64) {
-        self.camera.pan(dx, dy);
+        let (w, h) = (
+            f64::from(self.canvas.width()),
+            f64::from(self.canvas.height()),
+        );
+        self.camera.pan(dx, dy, w, h);
         self.render();
     }
 
@@ -331,7 +346,7 @@ impl Viewer {
                 if self.selected.contains(&seg.id) {
                     continue;
                 }
-                g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_COLOR);
+                g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &self.boundary_color);
                 g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
             }
             for seg in self
