@@ -16,6 +16,8 @@
 }
 
 * { box-sizing: border-box; }
+/* HTML `hidden` attr must beat every author display rule. */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   font: 14px/1.55 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

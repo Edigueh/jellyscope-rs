@@ -616,7 +616,6 @@ function renderProperties() {
   empty.hidden = true;
   dl.hidden = false;
 
-  const fmt = (v) => (v === 0 || v == null ? "—" : v.toFixed(3));
   let rows;
   if (sel.length === 1) {
     const cl = sel[0];
@@ -624,18 +623,14 @@ function renderProperties() {
       ID: cl.id,
       "Area (pix)": cl.area_pix,
       "Area (kpc²)": cl.area_kpc2.toFixed(3),
-      "r_eff (kpc)": fmt(cl.r_eff_kpc),
       RA: `${cl.ra_deg.toFixed(6)}°`,
       Dec: `${cl.dec_deg.toFixed(6)}°`,
     };
   } else {
     const totalArea = sel.reduce((s, c) => s + (c.area_kpc2 ?? 0), 0);
-    const withReff = sel.filter((c) => c.r_eff_kpc);
-    const meanReff = withReff.length ? withReff.reduce((s, c) => s + c.r_eff_kpc, 0) / withReff.length : null;
     rows = {
       Selected: sel.length,
       "Total area (kpc²)": totalArea.toFixed(3),
-      "Mean r_eff (kpc)": meanReff != null ? meanReff.toFixed(3) : "—",
     };
   }
   dl.innerHTML = Object.entries(rows).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
