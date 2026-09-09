@@ -24,11 +24,24 @@
         </fieldset>
 
         <div id="single-controls">
-          <label>Filter<select id="filter"></select></label>
+          <label>Filter
+            <input type="range" id="filter" min="0" max="0" step="1" value="0" />
+            <span id="filter-label"></span>
+          </label>
           <label>Stretch
             <select id="stretch">
               <option value="asinh">asinh</option>
               <option value="log">log</option>
+            </select>
+          </label>
+          <label>Colors
+            <select id="colorscale">
+              <option value="1" selected>Viridis</option>
+              <option value="2">Inferno</option>
+              <option value="3">Plasma</option>
+              <option value="4">Cividis</option>
+              <option value="5">Hot</option>
+              <option value="6">Greys</option>
             </select>
           </label>
         </div>
@@ -42,6 +55,10 @@
               <option value="percentile">percentile-asinh</option>
               <option value="lupton">Lupton</option>
             </select>
+          </label>
+          <label id="rgb-q-wrap" hidden>Q
+            <input type="range" id="rgb-q" min="1" max="30" step="0.5" value="8" />
+            <span id="rgb-q-label">8.0</span>
           </label>
         </div>
 

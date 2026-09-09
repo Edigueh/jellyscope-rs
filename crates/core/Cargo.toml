@@ -1,0 +1,11 @@
+[package]
+name = "jelly-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# none — stretch/composite are pure std f64 math shared by bake and viewer.

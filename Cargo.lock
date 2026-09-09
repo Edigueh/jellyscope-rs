@@ -7,6 +7,7 @@ name = "bake"
 version = "0.1.0"
 dependencies = [
  "fitrs",
+ "jelly-core",
  "serde",
  "serde_json",
  "thiserror",
@@ -44,6 +45,10 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "jelly-core"
+version = "0.1.0"
 
 [[package]]
 name = "js-sys"
@@ -181,6 +186,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 name = "viewer"
 version = "0.1.0"
 dependencies = [
+ "jelly-core",
  "js-sys",
  "wasm-bindgen",
  "web-sys",

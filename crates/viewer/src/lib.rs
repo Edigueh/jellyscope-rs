@@ -23,6 +23,7 @@ mod gl;
 
 use camera::Camera;
 use gl::{ImageProgram, OverlayProgram};
+use jelly_core::{composite, stretch};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as Gl, WebGlVertexArrayObject as Vao};
 
@@ -46,10 +47,16 @@ pub struct Viewer {
     image_vao: Vao,
     overlay_vao: Vao,
     camera: Camera,
-    colormap: bool,
+    /// 0 = pass-through RGB (composite); 1..=6 = colormap applied to luminance.
+    colormap_id: i32,
     canvas: HtmlCanvasElement,
     segments: Vec<Segment>,
     selected: Option<i64>,
+    // Raw flux planes (f64, row-major ny*nx), one per filter index. The viewer
+    // stretches/composites these live; nothing is pre-baked.
+    planes: Vec<Vec<f64>>,
+    nx: usize,
+    ny: usize,
     // GL buffers kept alive for the viewer's lifetime; never read directly.
     #[allow(dead_code)]
     quad_buf: web_sys::WebGlBuffer,
@@ -96,31 +103,112 @@ impl Viewer {
             image_vao,
             overlay_vao,
             camera: Camera::new(1, 1),
-            colormap: true,
+            colormap_id: 1,
             canvas,
             segments: Vec::new(),
             selected: None,
+            planes: Vec::new(),
+            nx: 0,
+            ny: 0,
             quad_buf,
             overlay_buf: None,
         })
     }
 
-    /// Replace the displayed texture. `is_rgb` selects pass-through colour;
-    /// otherwise the grayscale luminance is Viridis-mapped. Resets the camera to
-    /// fit on the first load / dimension change.
-    pub fn set_texture(
+    /// Start a new cube: set dimensions and clear the per-filter plane cache.
+    #[wasm_bindgen(js_name = beginCube)]
+    pub fn begin_cube(&mut self, nx: usize, ny: usize, n_filters: usize) {
+        self.nx = nx;
+        self.ny = ny;
+        self.planes = vec![Vec::new(); n_filters];
+    }
+
+    /// Cache filter `index`'s flux plane. `bytes` is little-endian f32,
+    /// `nx*ny*4`, row-major; widened to f64 for the exact bake math path.
+    #[wasm_bindgen(js_name = loadPlane)]
+    pub fn load_plane(
         &mut self,
+        index: usize,
         nx: usize,
         ny: usize,
-        rgba: &[u8],
-        is_rgb: bool,
+        bytes: &[u8],
     ) -> Result<(), JsValue> {
-        let changed = self.camera.nx as usize != nx || self.camera.ny as usize != ny;
-        let tex = gl::make_texture(&self.gl, nx, ny, rgba)?;
+        if bytes.len() != nx * ny * 4 {
+            return Err(JsValue::from_str("plane byte length != nx*ny*4"));
+        }
+        if index >= self.planes.len() {
+            return Err(JsValue::from_str("plane index out of range"));
+        }
+        let plane = bytes
+            .chunks_exact(4)
+            .map(|c| f64::from(f32::from_le_bytes([c[0], c[1], c[2], c[3]])))
+            .collect();
+        self.planes[index] = plane;
+        Ok(())
+    }
+
+    /// Render a single filter: stretch its flux plane on the CPU (f64, identical
+    /// to bake) → grayscale RGBA, colormapped in-shader. `stretch` = "log" |
+    /// "asinh"; `colormap_id` = 1..=6.
+    #[wasm_bindgen(js_name = renderSingle)]
+    pub fn render_single(
+        &mut self,
+        index: usize,
+        stretch: &str,
+        colormap_id: i32,
+    ) -> Result<(), JsValue> {
+        let plane = self
+            .planes
+            .get(index)
+            .filter(|p| !p.is_empty())
+            .ok_or_else(|| JsValue::from_str("filter plane not loaded"))?;
+        let scalar = if stretch == "log" {
+            stretch::log_stretch(plane)
+        } else {
+            stretch::lupton_asinh_stretch(plane)
+        };
+        let rgba = gray_rgba(&scalar);
+        self.colormap_id = colormap_id;
+        self.upload_and_show(&rgba)
+    }
+
+    /// Render an RGB composite from three cached planes on the CPU (f64,
+    /// identical to bake). `method` = "percentile" | "lupton"; `softening` is the
+    /// Lupton Q (ignored by percentile).
+    #[wasm_bindgen(js_name = renderRgb)]
+    pub fn render_rgb(
+        &mut self,
+        r: usize,
+        g: usize,
+        b: usize,
+        method: &str,
+        softening: f64,
+    ) -> Result<(), JsValue> {
+        let plane = |i: usize| {
+            self.planes
+                .get(i)
+                .filter(|p| !p.is_empty())
+                .ok_or_else(|| JsValue::from_str("filter plane not loaded"))
+        };
+        let (rp, gp, bp) = (plane(r)?, plane(g)?, plane(b)?);
+        let rgb = if method == "lupton" {
+            composite::lupton(rp, gp, bp, softening)
+        } else {
+            composite::percentile_asinh(rp, gp, bp)
+        };
+        let rgba = rgb_to_rgba(&rgb);
+        self.colormap_id = 0;
+        self.upload_and_show(&rgba)
+    }
+
+    /// Upload interleaved RGBA bytes as the displayed texture and redraw. Refits
+    /// the camera on the first load / dimension change.
+    fn upload_and_show(&mut self, rgba: &[u8]) -> Result<(), JsValue> {
+        let changed = self.camera.nx as usize != self.nx || self.camera.ny as usize != self.ny;
+        let tex = gl::make_texture(&self.gl, self.nx, self.ny, rgba)?;
         self.gl.bind_texture(Gl::TEXTURE_2D, Some(&tex));
-        self.colormap = !is_rgb;
         if changed {
-            self.camera = Camera::new(nx, ny);
+            self.camera = Camera::new(self.nx, self.ny);
             self.camera.fit(
                 f64::from(self.canvas.width()),
                 f64::from(self.canvas.height()),
@@ -168,6 +256,15 @@ impl Viewer {
         self.canvas.set_width(width);
         self.canvas.set_height(height);
         self.gl.viewport(0, 0, width as i32, height as i32);
+        // Re-fit so the camera's zoom/center track the new device-pixel backing
+        // store that canvas_to_image / matrix / viewport all read; otherwise a
+        // resize (e.g. Retina layout settling) desyncs them and click→pixel
+        // hit-testing lands off-image.
+        // ponytail: full re-fit resets pan/zoom on resize; rescale center/zoom
+        // by the size ratio instead if preserving navigation across resizes matters.
+        if self.nx > 0 && self.ny > 0 {
+            self.camera.fit(f64::from(width), f64::from(height));
+        }
         self.render();
     }
 
@@ -219,7 +316,7 @@ impl Viewer {
             self.camera.ny as f32,
         );
         g.uniform1i(Some(&self.image.u_tex), 0);
-        g.uniform1i(Some(&self.image.u_colormap), i32::from(self.colormap));
+        g.uniform1i(Some(&self.image.u_colormap), self.colormap_id);
         g.draw_arrays(Gl::TRIANGLES, 0, 6);
 
         // Clump boundaries (selected drawn last, on top, in red).
@@ -242,4 +339,29 @@ impl Viewer {
             }
         }
     }
+}
+
+/// Stretched scalar `[0,1]` (`NaN` = invalid) → grayscale RGBA. The shader
+/// colormaps the luminance; `NaN` pixels get alpha 0 so they read transparent.
+fn gray_rgba(values: &[f64]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(values.len() * 4);
+    for &v in values {
+        if v.is_nan() {
+            out.extend_from_slice(&[0, 0, 0, 0]);
+        } else {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let g = (v.clamp(0.0, 1.0) * 255.0) as u8;
+            out.extend_from_slice(&[g, g, g, 255]);
+        }
+    }
+    out
+}
+
+/// Interleaved `RGB` bytes → `RGBA` (opaque; composites already blacken `NaN`).
+fn rgb_to_rgba(rgb: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rgb.len() / 3 * 4);
+    for chunk in rgb.chunks_exact(3) {
+        out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+    }
+    out
 }

@@ -1,0 +1,16 @@
+services:
+  jellyscope:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jellyscope-rs:dev
+    container_name: jellyscope-rs
+    ports:
+      - "8000:80"          # host 8000 -> nginx 80; matches `just serve`
+    volumes:
+      - ./data:/data:ro    # FITS datasets baked at first startup
+      - dist:/srv/dist     # baked output persists across restarts
+    restart: unless-stopped
+
+volumes:
+  dist:

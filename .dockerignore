@@ -1,0 +1,13 @@
+# Build outputs — regenerated inside the image / at runtime.
+/target
+/dist
+/web/pkg
+
+# Volume-mounted at runtime, not baked into the image.
+/data
+
+# VCS, tooling, cruft.
+/.git
+/.claude
+.DS_Store
+HANDOFF.md

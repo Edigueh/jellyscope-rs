@@ -64,9 +64,8 @@ pub struct Cube {
 pub struct Filter {
     pub name: String,
     pub wavelength_um: Option<f64>,
-    /// Grayscale RGBA texture paths, one per stretch.
-    pub texture_log: String,
-    pub texture_asinh: String,
+    /// Raw f32 little-endian flux plane, `nx*ny*4` bytes, row-major.
+    pub texture_flux: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -74,9 +73,6 @@ pub struct RgbFilters {
     pub r: String,
     pub g: String,
     pub b: String,
-    /// RGBA composite texture paths, one per recipe.
-    pub texture_percentile: String,
-    pub texture_lupton: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,8 +151,6 @@ pub fn default_rgb(filters: &[String]) -> RgbFilters {
         r: r.unwrap_or_default(),
         g: g.unwrap_or_default(),
         b: b.unwrap_or_default(),
-        texture_percentile: String::new(),
-        texture_lupton: String::new(),
     }
 }
 

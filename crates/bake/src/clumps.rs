@@ -132,21 +132,37 @@ fn read_properties(path: &Path) -> Result<BTreeMap<i64, ClumpProperties>, ClumpE
             continue;
         }
         let f: Vec<&str> = line.split(',').collect();
+        // Required columns hard-fail; optional columns (some newer catalogs
+        // omit r_eff_* and inside) return None → treated as missing.
         let get = |c: &str| f.get(cols[c]).copied().unwrap_or_default().trim();
+        let opt = |c: &str| {
+            cols.get(c)
+                .and_then(|&i| f.get(i))
+                .copied()
+                .unwrap_or_default()
+                .trim()
+        };
         let bad = || ClumpError::BadRow {
             path: path.display().to_string(),
             line: n + 2,
+        };
+        let parse_opt_f64 = |s: &str| {
+            if s.is_empty() {
+                0.0
+            } else {
+                s.parse().unwrap_or(0.0)
+            }
         };
         let p = ClumpProperties {
             clump_id: get("clump_id").parse().map_err(|_| bad())?,
             area_pix: get("area_pix").parse().map_err(|_| bad())?,
             area_arcsec2: get("area_arcsec2").parse().map_err(|_| bad())?,
-            r_eff_arcsec: get("r_eff_arcsec").parse().map_err(|_| bad())?,
+            r_eff_arcsec: parse_opt_f64(opt("r_eff_arcsec")),
             x0: get("x0").parse().map_err(|_| bad())?,
             y0: get("y0").parse().map_err(|_| bad())?,
             area_kpc2: get("area_kpc2").parse().map_err(|_| bad())?,
-            r_eff_kpc: get("r_eff_kpc").parse().map_err(|_| bad())?,
-            inside: parse_bool(get("inside")),
+            r_eff_kpc: parse_opt_f64(opt("r_eff_kpc")),
+            inside: parse_bool(opt("inside")),
             component: get("component").to_string(),
         };
         out.insert(p.clump_id, p);

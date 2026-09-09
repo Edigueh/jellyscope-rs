@@ -1,8 +1,7 @@
 //! Flux stretches for single-filter display, ported 1:1 from the Python
 //! `image_viewer.py`. Each returns values in `[0, 1]` with `NaN` preserved for
-//! invalid pixels. Parameters are fixed (as in the source); the viewer does not
-//! expose live tuning.
-#![allow(dead_code)] // consumed by main.rs at the orchestration step
+//! invalid pixels. Parameters are fixed (as in the source); callers (`bake`
+//! natively, `viewer` live in WASM) run the same code so output matches.
 
 /// Sigma-clipped `(median, std)` over the finite values, matching astropy's
 /// `sigma_clipped_stats(sigma=3, maxiters=5)`: center on the median, clip at
@@ -237,5 +236,27 @@ mod tests {
         assert!((out[1] - 0.0).abs() < 1e-9);
         assert!((out[5 * 8 + 5] - 0.918_020_176_090_109_8).abs() < 1e-9);
         assert!(out[0].is_nan(), "NaN input must stay NaN");
+    }
+
+    // The viewer stores flux as f32 and widens back to f64 before running this
+    // exact code. Pin the accepted precision loss: stretched scalars stay within
+    // 1e-5 of the f64 path (NaN stays NaN).
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // deliberate f64->f32 round-trip
+    fn f32_widen_matches_f64_within_tolerance() {
+        let d = fixture();
+        let d32: Vec<f64> = d.iter().map(|&v| f64::from(v as f32)).collect();
+        for pair in [
+            (log_stretch(&d), log_stretch(&d32)),
+            (lupton_asinh_stretch(&d), lupton_asinh_stretch(&d32)),
+        ] {
+            let (a, b) = pair;
+            for (x, y) in a.iter().zip(&b) {
+                if x.is_nan() && y.is_nan() {
+                    continue;
+                }
+                assert!((x - y).abs() < 1e-5, "{x} vs {y}");
+            }
+        }
     }
 }

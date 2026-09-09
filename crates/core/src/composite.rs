@@ -2,7 +2,6 @@
 //! Two recipes: `percentile_asinh` (default, per-band) and `lupton`
 //! (color-preserving). Both take three `ny×nx` flux bands (row-major, `NaN`
 //! for invalid) and return interleaved `RGB` bytes, `ny×nx×3`.
-#![allow(dead_code)] // consumed by main.rs at the orchestration step
 
 use crate::stretch::{default_alpha, estimate_background, percentile};
 
@@ -35,17 +34,19 @@ pub fn percentile_asinh(r: &[f64], g: &[f64], b: &[f64]) -> Vec<u8> {
 /// Lupton et al. (2004) color-preserving composite (`lupton_rgb_composite`):
 /// stretch the total intensity, scale each band by `f(I)/(I-m)`, per-pixel
 /// renormalize if any channel exceeds 1, then global 99.5th-percentile
-/// normalize. `Q = 8`, `alpha` auto-estimated from the intensity background.
+/// normalize. `softening` is the Lupton Q (default 8 in the Python app; the
+/// viewer exposes it as a live slider). `alpha` auto-estimated from the
+/// intensity background.
 #[must_use]
 #[allow(clippy::many_single_char_names)] // r/g/b are the domain vocabulary
-pub fn lupton(r: &[f64], g: &[f64], b: &[f64]) -> Vec<u8> {
+pub fn lupton(r: &[f64], g: &[f64], b: &[f64], softening: f64) -> Vec<u8> {
     let n = r.len();
     let intensity: Vec<f64> = (0..n).map(|i| (r[i] + g[i] + b[i]) / 3.0).collect();
     let (m, sigma) = estimate_background(&intensity);
     let alpha = default_alpha(sigma);
 
     let chans: Vec<[f64; 3]> = (0..n)
-        .map(|i| lupton_pixel(r[i], g[i], b[i], intensity[i], m, alpha))
+        .map(|i| lupton_pixel(r[i], g[i], b[i], intensity[i], m, alpha, softening))
         .collect();
 
     // Global normalization by the 99.5th percentile of the positive values.
@@ -72,16 +73,25 @@ pub fn lupton(r: &[f64], g: &[f64], b: &[f64]) -> Vec<u8> {
 }
 
 /// One Lupton pixel: the color-preserving scale `f(I)/(I-m)` applied to each
-/// band, clamped ≥ 0, renormalized if any channel exceeds 1. `NaN` → black.
+/// band, clamped ≥ 0, renormalized if any channel exceeds 1. `softening` is the
+/// Lupton Q. `NaN` → black.
 #[allow(clippy::many_single_char_names)] // r/g/b are the domain vocabulary
-fn lupton_pixel(r: f64, g: f64, b: f64, intensity: f64, m: f64, alpha: f64) -> [f64; 3] {
-    const Q: f64 = 8.0;
+fn lupton_pixel(
+    r: f64,
+    g: f64,
+    b: f64,
+    intensity: f64,
+    m: f64,
+    alpha: f64,
+    softening: f64,
+) -> [f64; 3] {
+    let q = softening;
     if is_any_nan(r, g, b) {
         return [0.0, 0.0, 0.0];
     }
     let i_shift = intensity - m;
     let ratio = if i_shift > 0.0 {
-        (alpha * Q * i_shift).asinh() / Q / i_shift
+        (alpha * q * i_shift).asinh() / q / i_shift
     } else {
         0.0
     };
@@ -287,7 +297,7 @@ mod tests {
     #[test]
     fn lupton_matches_python() {
         let (r, g, b) = bands();
-        let out = lupton(&r, &g, &b);
+        let out = lupton(&r, &g, &b, 8.0);
         let px = |y: usize, x: usize| {
             let i = (y * 6 + x) * 3;
             [out[i], out[i + 1], out[i + 2]]
@@ -295,5 +305,37 @@ mod tests {
         assert_eq!(px(2, 3), [255, 197, 115], "bright source keeps color ratio");
         assert_eq!(px(1, 1), [18, 14, 8], "mid-tone color-preserving path");
         assert_eq!(px(4, 1), [0, 0, 0], "NaN pixel is black");
+    }
+
+    // The live Q slider must actually change the composite.
+    #[test]
+    fn lupton_q_changes_output() {
+        let (r, g, b) = bands();
+        assert_ne!(
+            lupton(&r, &g, &b, 8.0),
+            lupton(&r, &g, &b, 20.0),
+            "softening Q must affect output"
+        );
+    }
+
+    // Viewer stores flux as f32 and widens to f64; composite u8 output stays
+    // within one level of the f64 path.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // deliberate f64->f32 round-trip
+    fn f32_widen_matches_f64_within_one_level() {
+        let (r, g, b) = bands();
+        let w = |v: &[f64]| v.iter().map(|&x| f64::from(x as f32)).collect::<Vec<_>>();
+        let (r32, g32, b32) = (w(&r), w(&g), w(&b));
+        for (a, c) in [
+            (
+                percentile_asinh(&r, &g, &b),
+                percentile_asinh(&r32, &g32, &b32),
+            ),
+            (lupton(&r, &g, &b, 8.0), lupton(&r32, &g32, &b32, 8.0)),
+        ] {
+            for (x, y) in a.iter().zip(&c) {
+                assert!((i16::from(*x) - i16::from(*y)).abs() <= 1, "{x} vs {y}");
+            }
+        }
     }
 }

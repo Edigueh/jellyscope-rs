@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
+jelly-core = { path = "../core" }
 js-sys = "0.3"
 # Pinned to match the installed wasm-bindgen CLI; the crate and CLI versions
 # must agree exactly or the generated JS bindings mismatch at runtime.

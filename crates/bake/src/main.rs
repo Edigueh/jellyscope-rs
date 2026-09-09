@@ -1,15 +1,14 @@
 #![forbid(unsafe_code)]
 
 //! `bake`: turn a `data/` tree of `NIRCam` cubes + clump CSVs into a static
-//! `dist/` of raw RGBA textures and a `manifest.json` for the WASM viewer.
+//! `dist/` of raw f32 flux planes and a `manifest.json` for the WASM viewer.
+//! The viewer stretches/composites/colormaps live from these planes.
 //!
 //! Usage: `bake [DATA_DIR] [DIST_DIR]` (defaults: `data`, `dist`).
 
 mod clumps;
-mod composite;
 mod fits;
 mod manifest;
-mod stretch;
 mod wcs;
 
 use std::path::{Path, PathBuf};
@@ -112,45 +111,23 @@ fn bake_cube(
     let affine = Affine::from_keywords(&cube.wcs);
     let rel = |file: &str| format!("{dataset}/{cube_name}/{file}");
 
-    // Per-filter grayscale textures, one per stretch.
+    // Per-filter raw flux planes (f32 little-endian). The viewer widens these to
+    // f64 and runs the same stretch/composite code, so display is fully live.
     let mut filters = Vec::with_capacity(cube.n_filters());
     for (i, fname) in cube.filters.iter().enumerate() {
-        let slice = cube.slice(i);
         write_bytes(
-            &out_dir.join(format!("{fname}_log.rgba")),
-            &gray_rgba(&stretch::log_stretch(slice)),
-        )?;
-        write_bytes(
-            &out_dir.join(format!("{fname}_asinh.rgba")),
-            &gray_rgba(&stretch::lupton_asinh_stretch(slice)),
+            &out_dir.join(format!("{fname}.f32")),
+            &flux_f32_le(cube.slice(i)),
         )?;
         filters.push(Filter {
             name: fname.clone(),
             wavelength_um: manifest::wavelength_of(fname),
-            texture_log: rel(&format!("{fname}_log.rgba")),
-            texture_asinh: rel(&format!("{fname}_asinh.rgba")),
+            texture_flux: rel(&format!("{fname}.f32")),
         });
     }
 
-    // RGB composite textures from the default R/G/B filters, one per recipe.
-    let names = cube.filters.clone();
-    let mut rgb = manifest::default_rgb(&names);
-    let idx = |n: &str| names.iter().position(|f| f == n).unwrap_or(0);
-    let (r, g, b) = (
-        cube.slice(idx(&rgb.r)),
-        cube.slice(idx(&rgb.g)),
-        cube.slice(idx(&rgb.b)),
-    );
-    write_bytes(
-        &out_dir.join("rgb_percentile.rgba"),
-        &rgba(&composite::percentile_asinh(r, g, b)),
-    )?;
-    write_bytes(
-        &out_dir.join("rgb_lupton.rgba"),
-        &rgba(&composite::lupton(r, g, b)),
-    )?;
-    rgb.texture_percentile = rel("rgb_percentile.rgba");
-    rgb.texture_lupton = rel("rgb_lupton.rgba");
+    // Default R/G/B filter names (the viewer composites live from the planes).
+    let rgb = manifest::default_rgb(&cube.filters);
 
     // Pixel→clump grid (i32 little-endian).
     let pixmap: Vec<u8> = catalog
@@ -209,27 +186,14 @@ fn build_clump(catalog: &ClumpCatalog, id: i64, affine: &Affine) -> Option<Clump
     })
 }
 
-/// Stretched scalar `[0,1]` (NaN = invalid) → grayscale RGBA. Viewer applies a
-/// colormap; NaN pixels get alpha 0 so they read as transparent.
-fn gray_rgba(values: &[f64]) -> Vec<u8> {
+/// Flux plane (row-major f64, `NaN` for invalid) → little-endian f32 bytes.
+/// f32 halves the payload; the viewer widens back to f64 before the math, so
+/// `NaN` is preserved and output matches a pure-f64 bake within one u8 level.
+#[allow(clippy::cast_possible_truncation)] // f64 flux -> f32 storage, by design
+fn flux_f32_le(values: &[f64]) -> Vec<u8> {
     let mut out = Vec::with_capacity(values.len() * 4);
     for &v in values {
-        if v.is_nan() {
-            out.extend_from_slice(&[0, 0, 0, 0]);
-        } else {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let g = (v.clamp(0.0, 1.0) * 255.0) as u8;
-            out.extend_from_slice(&[g, g, g, 255]);
-        }
-    }
-    out
-}
-
-/// Interleaved `RGB` bytes → `RGBA` (opaque; composites already blacken NaN).
-fn rgba(rgb: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(rgb.len() / 3 * 4);
-    for chunk in rgb.chunks_exact(3) {
-        out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+        out.extend_from_slice(&(v as f32).to_le_bytes());
     }
     out
 }
@@ -261,9 +225,9 @@ mod tests {
         let m: serde_json::Value = serde_json::from_str(&json).expect("manifest is valid JSON");
         let cube = &m["datasets"][0]["cubes"][0];
         let (nx, ny) = (cube["nx"].as_u64().unwrap(), cube["ny"].as_u64().unwrap());
-        let tex = cube["filters"][0]["texture_log"].as_str().unwrap();
+        let tex = cube["filters"][0]["texture_flux"].as_str().unwrap();
         let bytes = std::fs::metadata(dist.join(tex)).unwrap().len();
-        assert_eq!(bytes, nx * ny * 4, "texture is nx*ny*4 RGBA bytes");
+        assert_eq!(bytes, nx * ny * 4, "flux plane is nx*ny*4 f32 bytes");
 
         let _ = std::fs::remove_dir_all(&dist);
     }

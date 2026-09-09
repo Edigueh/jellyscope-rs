@@ -1,6 +1,9 @@
 # Recipes: `just` to list. Native checks run on the host target; the viewer
 # crate also builds for wasm to catch target-specific breakage early.
 
+# Docker recipes: `just docker`.
+mod docker
+
 _default:
     @just --list
 
