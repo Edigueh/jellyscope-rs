@@ -260,6 +260,7 @@ async function onCubeChange() {
   pushCentroids();
   updateColorbar();
   await renderImage();
+  positionCentroidLabels();
   applyBoundaries();
 }
 
@@ -274,7 +275,6 @@ function pushCentroids() {
   state.viewer.setShowCentroids($("centroids").checked);
   ensureCentroidLabels();
   $("centroid-labels").hidden = !$("centroids").checked;
-  positionCentroidLabels();
 }
 
 function ensureCentroidLabels() {
