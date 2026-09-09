@@ -1,8 +1,6 @@
 //! Clump catalog: properties from `clumps_properties.csv`, per-pixel assignment
 //! from `clumps_pixels.csv`. Ported from Python `clumps.py`. Produces convex-hull
 //! boundary polygons (via Andrew's monotone chain) and a pixel→clump-id grid.
-#![allow(dead_code)]
-// consumed by manifest.rs / main.rs at the orchestration step
 // Casts here move between clump ids and pixel indices — all bounded by the cube
 // size (< 65k), so truncation/sign loss cannot occur in practice.
 #![allow(
@@ -48,7 +46,9 @@ pub struct ClumpProperties {
 /// row-major `ny × nx`), and the pixels assigned to each clump.
 #[derive(Debug, Clone)]
 pub struct ClumpCatalog {
+    #[allow(dead_code)] // part of the public catalog shape; read by id_at_pixel
     pub nx: usize,
+    #[allow(dead_code)] // part of the public catalog shape
     pub ny: usize,
     props: BTreeMap<i64, ClumpProperties>,
     pixel_clump: Vec<i32>,
@@ -85,6 +85,7 @@ impl ClumpCatalog {
 
     /// Clump id at pixel `(x, y)`, or `None` if empty / out of bounds.
     #[must_use]
+    #[allow(dead_code)] // covered by pixel_lookup_hits_and_misses; kept for future callers
     pub fn id_at_pixel(&self, x: usize, y: usize) -> Option<i64> {
         if x >= self.nx || y >= self.ny {
             return None;
@@ -125,6 +126,24 @@ fn read_properties(path: &Path) -> Result<BTreeMap<i64, ClumpProperties>, ClumpE
     let mut lines = text.lines();
     let header = lines.next().unwrap_or_default();
     let cols = column_index(header);
+
+    let missing = |column: &str| ClumpError::MissingColumn {
+        path: path.display().to_string(),
+        column: column.to_string(),
+    };
+    for required in [
+        "clump_id",
+        "area_pix",
+        "area_arcsec2",
+        "x0",
+        "y0",
+        "area_kpc2",
+        "component",
+    ] {
+        if !cols.contains_key(required) {
+            return Err(missing(required));
+        }
+    }
 
     let mut out = BTreeMap::new();
     for (n, line) in lines.enumerate() {
@@ -177,7 +196,13 @@ fn read_pixels(path: &Path, nx: usize, ny: usize) -> Result<PixelMap, ClumpError
     let mut lines = text.lines();
     let header = lines.next().unwrap_or_default();
     let cols = column_index(header);
-    let (ci, xi, yi) = (cols["clump_id"], cols["x"], cols["y"]);
+    let column = |name: &str| {
+        cols.get(name).copied().ok_or_else(|| ClumpError::MissingColumn {
+            path: path.display().to_string(),
+            column: name.to_string(),
+        })
+    };
+    let (ci, xi, yi) = (column("clump_id")?, column("x")?, column("y")?);
 
     let mut grid = vec![-1_i32; nx * ny];
     let mut pixels: BTreeMap<i64, Vec<(u32, u32)>> = BTreeMap::new();

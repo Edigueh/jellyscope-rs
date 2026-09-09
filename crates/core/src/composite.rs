@@ -3,7 +3,7 @@
 //! (color-preserving). Both take three `ny×nx` flux bands (row-major, `NaN`
 //! for invalid) and return interleaved `RGB` bytes, `ny×nx×3`.
 
-use crate::stretch::{default_alpha, estimate_background, percentile};
+use crate::stretch::{default_alpha, estimate_background, median, percentile};
 
 /// Per-band percentile+asinh composite (`percentile_asinh_composite`), the
 /// default. Each band is median-subtracted, percentile-clipped (10, 99.9),
@@ -112,11 +112,11 @@ fn lupton_pixel(
 /// One band: median-subtract, percentile-clip `[pmin, pmax]`, asinh-stretch by
 /// `scale`, pedestal-cut below `floor`. Empty/all-NaN bands map to zeros.
 fn normalize_band_asinh(band: &[f64], pmin: f64, pmax: f64, scale: f64, floor: f64) -> Vec<f64> {
-    let finite: Vec<f64> = band.iter().copied().filter(|v| v.is_finite()).collect();
+    let mut finite: Vec<f64> = band.iter().copied().filter(|v| v.is_finite()).collect();
     if finite.is_empty() {
         return vec![0.0; band.len()];
     }
-    let bkg = median(&finite);
+    let bkg = median(&mut finite);
     let shifted: Vec<f64> = band.iter().map(|&v| v - bkg).collect();
 
     let finite_shift: Vec<f64> = shifted.iter().copied().filter(|v| v.is_finite()).collect();
@@ -134,17 +134,6 @@ fn normalize_band_asinh(band: &[f64], pmin: f64, pmax: f64, scale: f64, floor: f
             y.clamp(0.0, 1.0)
         })
         .collect()
-}
-
-fn median(values: &[f64]) -> f64 {
-    let mut xs = values.to_vec();
-    xs.sort_unstable_by(f64::total_cmp);
-    let n = xs.len();
-    if n % 2 == 1 {
-        xs[n / 2]
-    } else {
-        f64::midpoint(xs[n / 2 - 1], xs[n / 2])
-    }
 }
 
 fn is_any_nan(a: f64, b: f64, c: f64) -> bool {

@@ -107,7 +107,7 @@ fn std_pop(xs: &[f64], mean: f64) -> f64 {
     var.sqrt()
 }
 
-fn median(xs: &mut [f64]) -> f64 {
+pub(crate) fn median(xs: &mut [f64]) -> f64 {
     xs.sort_unstable_by(f64::total_cmp);
     let n = xs.len();
     if n % 2 == 1 {

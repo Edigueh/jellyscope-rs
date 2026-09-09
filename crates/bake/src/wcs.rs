@@ -3,7 +3,6 @@
 //!
 //! Exact only when the WCS has no rotation/skew (diagonal PC, no CD/SIP); the
 //! cut cubes satisfy that to ~16 mas over the field, which the viewer tolerates.
-#![allow(dead_code)] // consumed by manifest.rs / main.rs at the orchestration step
 
 use crate::fits::WcsKeywords;
 
@@ -49,6 +48,7 @@ impl Affine {
 /// Great-circle angular separation between two sky points, in arcsec.
 /// Haversine form — numerically stable for the small separations here.
 #[must_use]
+#[allow(dead_code)] // covered by the astropy-golden test; kept for future WCS callers
 pub fn separation_arcsec(ra1: f64, dec1: f64, ra2: f64, dec2: f64) -> f64 {
     let (r1, d1) = (ra1.to_radians(), dec1.to_radians());
     let (r2, d2) = (ra2.to_radians(), dec2.to_radians());

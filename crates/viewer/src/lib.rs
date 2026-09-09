@@ -199,10 +199,8 @@ impl Viewer {
         self.gl.bind_texture(Gl::TEXTURE_2D, Some(&tex));
         if changed {
             self.camera = Camera::new(self.nx, self.ny);
-            self.camera.fit(
-                f64::from(self.canvas.width()),
-                f64::from(self.canvas.height()),
-            );
+            let (w, h) = self.canvas_size();
+            self.camera.fit(w, h);
         }
         self.render();
         Ok(())
@@ -244,19 +242,13 @@ impl Viewer {
     }
 
     pub fn pan(&mut self, dx: f64, dy: f64) {
-        let (w, h) = (
-            f64::from(self.canvas.width()),
-            f64::from(self.canvas.height()),
-        );
+        let (w, h) = self.canvas_size();
         self.camera.pan(dx, dy, w, h);
         self.render();
     }
 
     pub fn zoom(&mut self, factor: f64, canvas_x: f64, canvas_y: f64) {
-        let (w, h) = (
-            f64::from(self.canvas.width()),
-            f64::from(self.canvas.height()),
-        );
+        let (w, h) = self.canvas_size();
         self.camera.zoom_about(factor, canvas_x, canvas_y, w, h);
         self.render();
     }
@@ -266,10 +258,7 @@ impl Viewer {
     #[wasm_bindgen(js_name = canvasToImage)]
     #[must_use]
     pub fn canvas_to_image(&self, canvas_x: f64, canvas_y: f64) -> Vec<f64> {
-        let (w, h) = (
-            f64::from(self.canvas.width()),
-            f64::from(self.canvas.height()),
-        );
+        let (w, h) = self.canvas_size();
         self.camera
             .canvas_to_image(canvas_x, canvas_y, w, h)
             .to_vec()
@@ -280,18 +269,12 @@ impl Viewer {
     #[wasm_bindgen(js_name = imageToCanvas)]
     #[must_use]
     pub fn image_to_canvas(&self, ix: f64, iy: f64) -> Vec<f64> {
-        let (w, h) = (
-            f64::from(self.canvas.width()),
-            f64::from(self.canvas.height()),
-        );
+        let (w, h) = self.canvas_size();
         self.camera.image_to_canvas(ix, iy, w, h).to_vec()
     }
 
     pub fn render(&self) {
-        let (w, h) = (
-            f64::from(self.canvas.width()),
-            f64::from(self.canvas.height()),
-        );
+        let (w, h) = self.canvas_size();
         let m = self.camera.matrix(w, h);
         let g = &self.gl;
         g.clear_color(0.05, 0.05, 0.07, 1.0);
@@ -321,8 +304,18 @@ impl Viewer {
     }
 }
 
+impl Viewer {
+    fn canvas_size(&self) -> (f64, f64) {
+        (
+            f64::from(self.canvas.width()),
+            f64::from(self.canvas.height()),
+        )
+    }
+}
+
 /// Stretched scalar `[0,1]` (`NaN` = invalid) → grayscale RGBA. The shader
 /// colormaps the luminance; `NaN` pixels get alpha 0 so they read transparent.
+#[must_use]
 fn gray_rgba(values: &[f64]) -> Vec<u8> {
     let mut out = Vec::with_capacity(values.len() * 4);
     for &v in values {
@@ -338,6 +331,7 @@ fn gray_rgba(values: &[f64]) -> Vec<u8> {
 }
 
 /// Interleaved `RGB` bytes → `RGBA` (opaque; composites already blacken `NaN`).
+#[must_use]
 fn rgb_to_rgba(rgb: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(rgb.len() / 3 * 4);
     for chunk in rgb.chunks_exact(3) {

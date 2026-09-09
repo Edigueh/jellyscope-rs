@@ -1,7 +1,6 @@
 //! Reading `NIRCam` datacubes: a primary-HDU f64 cube with `FILTERn` names and
 //! a rotation-free celestial WCS in the header. Header WCS keywords are pulled
 //! raw here; the affine pixel-to-sky transform is derived in the `wcs` module.
-#![allow(dead_code)] // consumed by main.rs at the orchestration step
 
 use std::path::Path;
 

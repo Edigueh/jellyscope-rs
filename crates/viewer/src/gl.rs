@@ -24,17 +24,12 @@ pub struct OverlayProgram {
 
 impl OverlayProgram {
     pub fn new(gl: &Gl) -> Result<Self, JsValue> {
-        let vert = compile(gl, Gl::VERTEX_SHADER, include_str!("shaders/overlay.vert"))?;
-        let frag = compile(
+        let program = build_program(
             gl,
-            Gl::FRAGMENT_SHADER,
+            include_str!("shaders/overlay.vert"),
             include_str!("shaders/overlay.frag"),
         )?;
-        let program = link(gl, &vert, &frag)?;
-        let loc = |name: &str| {
-            gl.get_uniform_location(&program, name)
-                .ok_or_else(|| JsValue::from_str(&format!("missing uniform {name}")))
-        };
+        let loc = |name: &str| uniform(gl, &program, name);
         Ok(Self {
             u_view: loc("u_view")?,
             u_color: loc("u_color")?,
@@ -63,13 +58,12 @@ pub fn upload_verts(gl: &Gl, verts: &[f32]) -> Result<web_sys::WebGlBuffer, JsVa
 
 impl ImageProgram {
     pub fn new(gl: &Gl) -> Result<Self, JsValue> {
-        let vert = compile(gl, Gl::VERTEX_SHADER, include_str!("shaders/image.vert"))?;
-        let frag = compile(gl, Gl::FRAGMENT_SHADER, include_str!("shaders/image.frag"))?;
-        let program = link(gl, &vert, &frag)?;
-        let loc = |name: &str| {
-            gl.get_uniform_location(&program, name)
-                .ok_or_else(|| JsValue::from_str(&format!("missing uniform {name}")))
-        };
+        let program = build_program(
+            gl,
+            include_str!("shaders/image.vert"),
+            include_str!("shaders/image.frag"),
+        )?;
+        let loc = |name: &str| uniform(gl, &program, name);
         Ok(Self {
             u_view: loc("u_view")?,
             u_size: loc("u_size")?,
@@ -103,6 +97,17 @@ pub fn make_texture(gl: &Gl, nx: usize, ny: usize, rgba: &[u8]) -> Result<WebGlT
     gl.tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MIN_FILTER, Gl::NEAREST as i32);
     gl.tex_parameteri(Gl::TEXTURE_2D, Gl::TEXTURE_MAG_FILTER, Gl::NEAREST as i32);
     Ok(tex)
+}
+
+fn build_program(gl: &Gl, vert_src: &str, frag_src: &str) -> Result<WebGlProgram, JsValue> {
+    let vert = compile(gl, Gl::VERTEX_SHADER, vert_src)?;
+    let frag = compile(gl, Gl::FRAGMENT_SHADER, frag_src)?;
+    link(gl, &vert, &frag)
+}
+
+fn uniform(gl: &Gl, program: &WebGlProgram, name: &str) -> Result<WebGlUniformLocation, JsValue> {
+    gl.get_uniform_location(program, name)
+        .ok_or_else(|| JsValue::from_str(&format!("missing uniform {name}")))
 }
 
 fn compile(gl: &Gl, kind: u32, src: &str) -> Result<WebGlShader, JsValue> {
