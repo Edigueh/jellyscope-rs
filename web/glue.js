@@ -49,7 +49,10 @@ async function main() {
   $("cube").addEventListener("change", onCubeChange);
   $("filter").addEventListener("input", () => { updateFilterLabel(); renderImage(); });
   $("stretch").addEventListener("change", renderImage);
-  $("colorscale").addEventListener("change", renderImage);
+  $("colorscale").addEventListener("change", () => {
+    updateColorbar();
+    renderImage();
+  });
   $("rgb-method").addEventListener("change", () => { updateRgbMethodUI(); renderImage(); });
   for (const anchor of ["R", "G", "B"]) {
     $(`rgb-${anchor.toLowerCase()}`).addEventListener("change", (e) => {
@@ -68,6 +71,9 @@ async function main() {
   $("boundary-color").addEventListener("input", (e) => {
     const [r, g, b] = hexToRgb(e.target.value);
     state.viewer.setBoundaryColor(r, g, b);
+  });
+  $("centroids").addEventListener("change", (e) => {
+    state.viewer.setShowCentroids(e.target.checked);
   });
   $("clear-selection").addEventListener("click", () => setSelection(new Set()));
 
@@ -103,10 +109,6 @@ function bindSplitters() {
     min: 240,
     max: () => window.innerWidth - 320,
     invert: true, // dragging left widens the rail
-  });
-  bindSplitter($("split-y"), "y", "--top-h", {
-    min: 90,
-    max: () => window.innerHeight - 200,
   });
 }
 
@@ -171,7 +173,31 @@ function setMode(mode) {
   $("single-controls").hidden = mode !== "single";
   $("rgb-controls").hidden = mode !== "rgb";
   if (mode === "rgb") updateRgbMethodUI();
+  updateColorbar();
   renderImage();
+}
+
+// Colormap ID → CSS linear-gradient string (bottom → top = 0 → 1).
+const COLORBAR_GRADIENTS = {
+  "1": "linear-gradient(to top, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725)",
+  "2": "linear-gradient(to top, #000004, #3b0f70, #8c2981, #de4968, #fe9f6d, #fcfdbf)",
+  "3": "linear-gradient(to top, #0d0887, #6a00a8, #b12a90, #e16462, #fca636, #f0f921)",
+  "4": "linear-gradient(to top, #00224e, #123570, #3b496c, #575d6d, #88836a, #d5c063, #fee838)",
+  "5": "linear-gradient(to top, #000000, #7f0000, #ff0000, #ff7f00, #ffff00, #ffffff)",
+  "6": "linear-gradient(to top, #ffffff, #000000)",
+};
+
+function updateColorbar() {
+  const cb = $("colorbar");
+  if (!cb) return;
+  if (state.mode === "rgb") {
+    cb.hidden = true;
+    return;
+  }
+  cb.hidden = false;
+  const cs = $("colorscale").value;
+  const grad = COLORBAR_GRADIENTS[cs] || COLORBAR_GRADIENTS["1"];
+  document.documentElement.style.setProperty("--colorbar-gradient", grad);
 }
 
 function setDragMode(mode) {
@@ -234,8 +260,21 @@ async function onCubeChange() {
   state.pixmap = new Int32Array((await bytes(c.pixel_clump)).buffer);
   setSelection(new Set(), { skipRerender: true });
   renderClumpList();
+  pushCentroids();
+  updateColorbar();
   await renderImage();
   applyBoundaries();
+}
+
+function pushCentroids() {
+  const clumps = state.cube.clumps;
+  const xs = new Float32Array(2 * clumps.length);
+  clumps.forEach((cl, i) => {
+    xs[2 * i]     = cl.x0;
+    xs[2 * i + 1] = cl.y0;
+  });
+  state.viewer.setCentroids(xs);
+  state.viewer.setShowCentroids($("centroids").checked);
 }
 
 function renderImage() {

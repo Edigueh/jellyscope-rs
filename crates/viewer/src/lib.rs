@@ -33,6 +33,9 @@ use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as Gl, WebGlVertexArrayO
 // radialpaths --orange so selection reads clearly against any user colour.
 const CLUMP_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const CLUMP_SELECTED: [f32; 4] = [0.836, 0.369, 0.0, 1.0];
+// Centroid markers reuse the overlay shader; --teal for parity with the
+// clump-list "inside" accent.
+const CENTROID_COLOR: [f32; 4] = [0.165, 0.616, 0.561, 1.0];
 
 /// One clump's vertex range within the overlay buffer, as `LINE_STRIP`.
 struct Segment {
@@ -48,6 +51,7 @@ pub struct Viewer {
     overlay: OverlayProgram,
     image_vao: Vao,
     overlay_vao: Vao,
+    centroid_vao: Vao,
     camera: Camera,
     /// 0 = pass-through RGB (composite); 1..=6 = colormap applied to luminance.
     colormap_id: i32,
@@ -55,6 +59,8 @@ pub struct Viewer {
     segments: Vec<Segment>,
     selected: HashSet<i64>,
     boundary_color: [f32; 4],
+    show_centroids: bool,
+    n_centroids: i32,
     // Raw flux planes (f64, row-major ny*nx), one per filter index. The viewer
     // stretches/composites these live; nothing is pre-baked.
     planes: Vec<Vec<f64>>,
@@ -65,6 +71,8 @@ pub struct Viewer {
     quad_buf: web_sys::WebGlBuffer,
     #[allow(dead_code)]
     overlay_buf: Option<web_sys::WebGlBuffer>,
+    #[allow(dead_code)]
+    centroid_buf: Option<web_sys::WebGlBuffer>,
 }
 
 #[wasm_bindgen]
@@ -98,6 +106,9 @@ impl Viewer {
         let overlay_vao = gl
             .create_vertex_array()
             .ok_or_else(|| JsValue::from_str("vao"))?;
+        let centroid_vao = gl
+            .create_vertex_array()
+            .ok_or_else(|| JsValue::from_str("vao"))?;
 
         Ok(Viewer {
             gl,
@@ -105,17 +116,21 @@ impl Viewer {
             overlay,
             image_vao,
             overlay_vao,
+            centroid_vao,
             camera: Camera::new(1, 1),
             colormap_id: 1,
             canvas,
             segments: Vec::new(),
             selected: HashSet::new(),
             boundary_color: CLUMP_COLOR,
+            show_centroids: false,
+            n_centroids: 0,
             planes: Vec::new(),
             nx: 0,
             ny: 0,
             quad_buf,
             overlay_buf: None,
+            centroid_buf: None,
         })
     }
 
@@ -265,6 +280,24 @@ impl Viewer {
         self.render();
     }
 
+    /// Upload centroid positions (flat `x,y` pairs in image space) to a
+    /// dedicated VAO. Rendered as `GL_POINTS` when `show_centroids` is on.
+    #[wasm_bindgen(js_name = setCentroids)]
+    pub fn set_centroids(&mut self, xs: &[f32]) -> Result<(), JsValue> {
+        self.gl.bind_vertex_array(Some(&self.centroid_vao));
+        self.centroid_buf = Some(gl::upload_verts(&self.gl, xs)?);
+        self.n_centroids = (xs.len() / 2) as i32;
+        self.render();
+        Ok(())
+    }
+
+    /// Toggle centroid-marker visibility.
+    #[wasm_bindgen(js_name = setShowCentroids)]
+    pub fn set_show_centroids(&mut self, v: bool) {
+        self.show_centroids = v;
+        self.render();
+    }
+
     /// Match the drawing-buffer size to the canvas CSS size (device pixels).
     pub fn resize(&mut self, width: u32, height: u32) {
         self.canvas.set_width(width);
@@ -357,6 +390,15 @@ impl Viewer {
                 g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CLUMP_SELECTED);
                 g.draw_arrays(Gl::LINE_STRIP, seg.start, seg.count);
             }
+        }
+
+        // Centroid markers (GL_POINTS, size set in the overlay vertex shader).
+        if self.show_centroids && self.n_centroids > 0 {
+            g.use_program(Some(&self.overlay.program));
+            g.bind_vertex_array(Some(&self.centroid_vao));
+            g.uniform_matrix3fv_with_f32_array(Some(&self.overlay.u_view), false, &m);
+            g.uniform4fv_with_f32_array(Some(&self.overlay.u_color), &CENTROID_COLOR);
+            g.draw_arrays(Gl::POINTS, 0, self.n_centroids);
         }
     }
 }
