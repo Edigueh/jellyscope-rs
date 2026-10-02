@@ -4,10 +4,11 @@
 import init, { Viewer } from "./pkg/viewer.js";
 
 const $ = (id) => document.getElementById(id);
-// Resolve dist/ relative to this module's URL. Works under any base path:
-// `just serve` (repo root, glue.js at /web/glue.js → /dist/) and
-// GitHub Pages sub-paths (https://user.github.io/repo/glue.js → /repo/dist/).
-const DIST = new URL("../dist/", import.meta.url).href.replace(/\/$/, "");
+// Docker serves glue.js under /web; the Pages artifact puts it beside dist/.
+const DIST = new URL(
+  location.pathname.includes("/web/") ? "../dist/" : "dist/",
+  import.meta.url,
+).href.replace(/\/$/, "");
 
 // RGB defaults + wavelength-snapping constants, mirroring the Python app.
 const DEFAULT_RGB_FILTERS = { r: "F200W", g: "F115W", b: "F090W" };
