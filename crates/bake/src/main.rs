@@ -128,12 +128,13 @@ fn bake_dataset(
             path: fits_path.clone(),
             source,
         })?;
-        let catalog = ClumpCatalog::load(&props_csv, &pixels_csv, cube.nx, cube.ny).map_err(
-            |source| BakeError::Clumps {
-                dataset: dataset.to_string(),
-                source,
-            },
-        )?;
+        let catalog =
+            ClumpCatalog::load(&props_csv, &pixels_csv, cube.nx, cube.ny).map_err(|source| {
+                BakeError::Clumps {
+                    dataset: dataset.to_string(),
+                    source,
+                }
+            })?;
         let cube_name = fits_path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
@@ -235,6 +236,13 @@ fn build_clump(catalog: &ClumpCatalog, id: i64, affine: &Affine) -> Option<Clump
         ra_deg: ra,
         dec_deg: dec,
         component: p.component.clone(),
+        mass: p.mass,
+        logzsol: p.logzsol,
+        dust2: p.dust2,
+        tage: p.tage,
+        gas_logu: p.gas_logu,
+        sfr_avg: p.sfr_avg,
+        ssfr_avg: p.ssfr_avg,
         area_pix: p.area_pix,
         area_arcsec2: p.area_arcsec2,
         r_eff_arcsec: p.r_eff_arcsec,

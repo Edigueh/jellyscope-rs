@@ -349,17 +349,28 @@ canvas#view:active { cursor: grabbing; }
 
 #panel-props {
   margin: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: .25rem .8rem;
   font-size: .85rem;
+  overflow-x: auto;
 }
-#panel-props dt { color: var(--muted); }
-#panel-props dd {
-  margin: 0;
-  font-family: SFMono-Regular, Consolas, monospace;
-  color: var(--ink);
+.property-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+.property-table th, .property-table td {
+  padding: .3rem .4rem;
+  border-bottom: 1px solid var(--line);
   text-align: right;
+  font-family: SFMono-Regular, Consolas, monospace;
+}
+.property-table th:first-child, .property-table td:first-child {
+  text-align: left;
+  color: var(--muted);
+  font-family: inherit;
+}
+.property-table thead th {
+  color: var(--blue);
+  font-weight: 680;
 }
 
 #seps {

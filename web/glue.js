@@ -5,9 +5,9 @@ import init, { Viewer } from "./pkg/viewer.js";
 
 const $ = (id) => document.getElementById(id);
 // Resolve dist/ relative to this module's URL. Works under any base path:
-// `just serve` (repo root, glue.js at /web/glue.js → /web/dist/) and
+// `just serve` (repo root, glue.js at /web/glue.js → /dist/) and
 // GitHub Pages sub-paths (https://user.github.io/repo/glue.js → /repo/dist/).
-const DIST = new URL("dist/", import.meta.url).href.replace(/\/$/, "");
+const DIST = new URL("../dist/", import.meta.url).href.replace(/\/$/, "");
 
 // RGB defaults + wavelength-snapping constants, mirroring the Python app.
 const DEFAULT_RGB_FILTERS = { r: "F200W", g: "F115W", b: "F090W" };
@@ -684,36 +684,62 @@ function renderRail() {
 
 function renderProperties() {
   const empty = $("panel-empty");
-  const dl = $("panel-props");
+  const panel = $("panel-props");
   const sel = [...state.selected].map((bid) => state.cube.clumps.find((c) => BigInt(c.id) === bid)).filter(Boolean);
 
   if (sel.length === 0) {
     empty.hidden = false;
-    dl.hidden = true;
-    dl.innerHTML = "";
+    panel.hidden = true;
+    panel.innerHTML = "";
     return;
   }
   empty.hidden = true;
-  dl.hidden = false;
+  panel.hidden = false;
+  panel.innerHTML = renderPropertyTable(sel);
+}
 
-  let rows;
-  if (sel.length === 1) {
-    const cl = sel[0];
-    rows = {
-      ID: cl.id,
-      "Area (pix)": cl.area_pix,
-      "Area (kpc²)": cl.area_kpc2.toFixed(3),
-      RA: `${cl.ra_deg.toFixed(6)}°`,
-      Dec: `${cl.dec_deg.toFixed(6)}°`,
-    };
-  } else {
-    const totalArea = sel.reduce((s, c) => s + (c.area_kpc2 ?? 0), 0);
-    rows = {
-      Selected: sel.length,
-      "Total area (kpc²)": totalArea.toFixed(3),
-    };
+function formatOptional(value, digits) {
+  return value == null ? "—" : Number(value).toFixed(digits);
+}
+
+function formatExponential(value) {
+  return value == null ? "—" : Number(value).toExponential(3).replace(/e([+-])(\d)$/, "e$10$2");
+}
+
+function propertyRows(cl) {
+  const component = cl.component ? cl.component[0].toUpperCase() + cl.component.slice(1) : "—";
+  return [
+    ["Clump ID", cl.id],
+    ["Component", component],
+    ["Inside disk", cl.inside == null ? "—" : cl.inside ? "Yes" : "No"],
+    ["Area (pixels)", cl.area_pix],
+    ["Area (arcsec²)", formatOptional(cl.area_arcsec2, 4)],
+    ["Area (kpc²)", formatOptional(cl.area_kpc2, 4)],
+    ["R_eff (arcsec)", formatOptional(cl.r_eff_arcsec, 4)],
+    ["R_eff (kpc)", formatOptional(cl.r_eff_kpc, 4)],
+    ["Centroid x", formatOptional(cl.x0, 1)],
+    ["Centroid y", formatOptional(cl.y0, 1)],
+    ["RA (deg)", formatOptional(cl.ra_deg, 6)],
+    ["Dec (deg)", formatOptional(cl.dec_deg, 6)],
+    ["log M★ (M☉)", formatOptional(cl.mass, 3)],
+    ["SFR (M☉/yr)", formatOptional(cl.sfr_avg, 4)],
+    ["sSFR (yr⁻¹)", formatExponential(cl.ssfr_avg)],
+    ["log Z/Z☉", formatOptional(cl.logzsol, 3)],
+    ["Dust τ₂", formatOptional(cl.dust2, 3)],
+    ["Age (Gyr)", formatOptional(cl.tage, 3)],
+    ["log U (gas)", formatOptional(cl.gas_logu, 2)],
+  ];
+}
+
+function renderPropertyTable(clumps) {
+  if (clumps.length === 1) {
+    const rows = propertyRows(clumps[0]);
+    return `<table class="property-table"><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${label}</th><td>${value}</td></tr>`).join("")}</tbody></table>`;
   }
-  dl.innerHTML = Object.entries(rows).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const labels = propertyRows(clumps[0]).map(([label]) => label);
+  const header = `<thead><tr><th scope="col">Property</th>${clumps.map((cl) => `<th scope="col">#${cl.id}</th>`).join("")}</tr></thead>`;
+  const rows = labels.map((label, i) => `<tr><th scope="row">${label}</th>${clumps.map((cl) => `<td>${propertyRows(cl)[i][1]}</td>`).join("")}</tr>`).join("");
+  return `<table class="property-table">${header}<tbody>${rows}</tbody></table>`;
 }
 
 function renderSeparations() {

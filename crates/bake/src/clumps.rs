@@ -31,14 +31,21 @@ pub enum ClumpError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClumpProperties {
     pub clump_id: i64,
+    pub mass: Option<f64>,
+    pub logzsol: Option<f64>,
+    pub dust2: Option<f64>,
+    pub tage: Option<f64>,
+    pub gas_logu: Option<f64>,
+    pub sfr_avg: Option<f64>,
+    pub ssfr_avg: Option<f64>,
     pub area_pix: i64,
     pub area_arcsec2: f64,
-    pub r_eff_arcsec: f64,
+    pub r_eff_arcsec: Option<f64>,
     pub x0: f64,
     pub y0: f64,
     pub area_kpc2: f64,
-    pub r_eff_kpc: f64,
-    pub inside: bool,
+    pub r_eff_kpc: Option<f64>,
+    pub inside: Option<bool>,
     pub component: String,
 }
 
@@ -167,21 +174,28 @@ fn read_properties(path: &Path) -> Result<BTreeMap<i64, ClumpProperties>, ClumpE
         };
         let parse_opt_f64 = |s: &str| {
             if s.is_empty() {
-                0.0
+                Ok(None)
             } else {
-                s.parse().unwrap_or(0.0)
+                s.parse().map(Some).map_err(|_| bad())
             }
         };
         let p = ClumpProperties {
             clump_id: get("clump_id").parse().map_err(|_| bad())?,
+            mass: parse_opt_f64(opt("mass"))?,
+            logzsol: parse_opt_f64(opt("logzsol"))?,
+            dust2: parse_opt_f64(opt("dust2"))?,
+            tage: parse_opt_f64(opt("tage"))?,
+            gas_logu: parse_opt_f64(opt("gas_logu"))?,
+            sfr_avg: parse_opt_f64(opt("sfr_avg"))?,
+            ssfr_avg: parse_opt_f64(opt("ssfr_avg"))?,
             area_pix: get("area_pix").parse().map_err(|_| bad())?,
             area_arcsec2: get("area_arcsec2").parse().map_err(|_| bad())?,
-            r_eff_arcsec: parse_opt_f64(opt("r_eff_arcsec")),
+            r_eff_arcsec: parse_opt_f64(opt("r_eff_arcsec"))?,
             x0: get("x0").parse().map_err(|_| bad())?,
             y0: get("y0").parse().map_err(|_| bad())?,
             area_kpc2: get("area_kpc2").parse().map_err(|_| bad())?,
-            r_eff_kpc: parse_opt_f64(opt("r_eff_kpc")),
-            inside: parse_bool(opt("inside")),
+            r_eff_kpc: parse_opt_f64(opt("r_eff_kpc"))?,
+            inside: parse_opt_bool(opt("inside")),
             component: get("component").to_string(),
         };
         out.insert(p.clump_id, p);
@@ -197,10 +211,12 @@ fn read_pixels(path: &Path, nx: usize, ny: usize) -> Result<PixelMap, ClumpError
     let header = lines.next().unwrap_or_default();
     let cols = column_index(header);
     let column = |name: &str| {
-        cols.get(name).copied().ok_or_else(|| ClumpError::MissingColumn {
-            path: path.display().to_string(),
-            column: name.to_string(),
-        })
+        cols.get(name)
+            .copied()
+            .ok_or_else(|| ClumpError::MissingColumn {
+                path: path.display().to_string(),
+                column: name.to_string(),
+            })
     };
     let (ci, xi, yi) = (column("clump_id")?, column("x")?, column("y")?);
 
@@ -298,6 +314,10 @@ fn parse_bool(s: &str) -> bool {
     matches!(s.trim(), "True" | "true" | "1")
 }
 
+fn parse_opt_bool(s: &str) -> Option<bool> {
+    (!s.trim().is_empty()).then(|| parse_bool(s))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,10 +343,34 @@ mod tests {
         let c0 = cat.properties(0).expect("clump 0");
         assert_eq!(c0.area_pix, 121);
         assert_eq!(c0.component, "outside");
-        assert!(!c0.inside);
+        assert_eq!(c0.inside, Some(false));
         let c1 = cat.properties(1).expect("clump 1");
         assert_eq!(c1.component, "disk");
-        assert!(c1.inside);
+        assert_eq!(c1.inside, Some(true));
+    }
+
+    #[test]
+    fn loads_optional_and_sed_properties() {
+        let root = std::env::temp_dir().join(format!("jellyscope-clumps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            root.join("props.csv"),
+            "clump_id,mass,logzsol,dust2,tage,gas_logu,area_kpc2,component,sfr_avg,ssfr_avg,area_pix,area_arcsec2,x0,y0\n1,8.5,-0.3,0.1,0.4,-2.5,0.02,disk,0.005,1.6e-10,5,0.2,3,3\n",
+        )
+        .unwrap();
+        std::fs::write(root.join("pixels.csv"), "clump_id,x,y\n1,3,3\n").unwrap();
+
+        let cat =
+            ClumpCatalog::load(&root.join("props.csv"), &root.join("pixels.csv"), 10, 10).unwrap();
+        let clump = cat.properties(1).unwrap();
+        assert_eq!(clump.mass, Some(8.5));
+        assert_eq!(clump.sfr_avg, Some(0.005));
+        assert_eq!(clump.ssfr_avg, Some(1.6e-10));
+        assert_eq!(clump.r_eff_arcsec, None);
+        assert_eq!(clump.inside, None);
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

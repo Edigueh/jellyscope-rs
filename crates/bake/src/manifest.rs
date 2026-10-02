@@ -93,12 +93,19 @@ pub struct Clump {
     pub ra_deg: f64,
     pub dec_deg: f64,
     pub component: String,
+    pub mass: Option<f64>,
+    pub logzsol: Option<f64>,
+    pub dust2: Option<f64>,
+    pub tage: Option<f64>,
+    pub gas_logu: Option<f64>,
+    pub sfr_avg: Option<f64>,
+    pub ssfr_avg: Option<f64>,
     pub area_pix: i64,
     pub area_arcsec2: f64,
-    pub r_eff_arcsec: f64,
+    pub r_eff_arcsec: Option<f64>,
     pub area_kpc2: f64,
-    pub r_eff_kpc: f64,
-    pub inside: bool,
+    pub r_eff_kpc: Option<f64>,
+    pub inside: Option<bool>,
 }
 
 /// Pick default R/G/B filter names by wavelength rank, mirroring
