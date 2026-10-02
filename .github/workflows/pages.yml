@@ -46,8 +46,14 @@ jobs:
         run: |
           mkdir -p _site
           cp -r web/. _site/
-          rm -f _site/dist
-          cp -r dist _site/dist
+          rm -rf _site/dist
+          mkdir -p _site/dist
+          tar xzf dist.tar.gz -C _site/dist
+          if [ -d _site/dist/dist ]; then
+            cp -r _site/dist/dist/. _site/dist/
+            rm -rf _site/dist/dist
+          fi
+          test -f _site/dist/manifest.json
           touch _site/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3

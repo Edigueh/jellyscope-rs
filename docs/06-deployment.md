@@ -72,6 +72,7 @@ flowchart LR
 ## GitHub Pages data artifact
 
 The Pages workflow downloads the release asset named exactly `dist.tar.gz`,
-extracts it as `dist/`, copies `web/` beside it, and publishes the combined
+normalizes either a root-level archive or an archive containing a top-level
+`dist/` directory, copies `web/` beside it, and publishes the combined
 directory. A release upload label does not rename an asset: its actual filename
 must be `dist.tar.gz`.
