@@ -114,7 +114,7 @@ impl Viewer {
     }
 
     /// Cache filter `index`'s flux plane. `bytes` is little-endian f32,
-    /// `nx*ny*4`, row-major; widened to f64 for the exact bake math path.
+    /// `nx*ny*4`, row-major; widened to f64 for the display math path.
     #[wasm_bindgen(js_name = loadPlane)]
     pub fn load_plane(
         &mut self,
@@ -137,8 +137,8 @@ impl Viewer {
         Ok(())
     }
 
-    /// Render a single filter: stretch its flux plane on the CPU (f64, identical
-    /// to bake) → grayscale RGBA, colormapped in-shader. `stretch` = "log" |
+    /// Render a single filter: stretch its flux plane on the CPU (f64) →
+    /// grayscale RGBA, colormapped in-shader. `stretch` = "log" |
     /// "asinh"; `colormap_id` = 1..=6.
     #[wasm_bindgen(js_name = renderSingle)]
     pub fn render_single(
@@ -162,8 +162,8 @@ impl Viewer {
         self.upload_and_show(&rgba)
     }
 
-    /// Render an RGB composite from three cached planes on the CPU (f64,
-    /// identical to bake). `method` = "percentile" | "lupton"; `softening` is the
+    /// Render an RGB composite from three cached planes on the CPU (f64).
+    /// `method` = "percentile" | "lupton"; `softening` is the
     /// Lupton Q (ignored by percentile).
     #[wasm_bindgen(js_name = renderRgb)]
     pub fn render_rgb(

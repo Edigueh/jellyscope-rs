@@ -1,6 +1,8 @@
 # Runtime (viewer)
 
 JS shell loads manifest + glue.js, instantiates WASM Viewer, pushes planes, drives render.
+Flux planes are fetched as little-endian f32 values, widened to f64 in WASM, and
+stretched or composited when the selected view changes.
 
 ## Boot
 

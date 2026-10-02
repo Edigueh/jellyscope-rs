@@ -1,7 +1,7 @@
 //! Flux stretches for single-filter display, ported 1:1 from the Python
 //! `image_viewer.py`. Each returns values in `[0, 1]` with `NaN` preserved for
-//! invalid pixels. Parameters are fixed (as in the source); callers (`bake`
-//! natively, `viewer` live in WASM) run the same code so output matches.
+//! invalid pixels. Parameters are fixed (as in the source); the viewer runs
+//! this code live in WASM.
 
 /// Sigma-clipped `(median, std)` over the finite values, matching astropy's
 /// `sigma_clipped_stats(sigma=3, maxiters=5)`: center on the median, clip at
@@ -33,7 +33,8 @@ pub fn default_alpha(sigma: f64) -> f64 {
 
 /// Log stretch (`image_viewer._log_stretch`): asymmetric-percentile clip
 /// (10, 99.98), normalize, then `log(a·x + 1) / log(a + 1)` with `a = 200`.
-/// `NaN`/non-positive pixels are excluded from the limits and map to 0.
+/// Non-positive pixels clip to 0; `NaN` remains invalid and becomes
+/// transparent in the viewer.
 #[must_use]
 pub fn log_stretch(data: &[f64]) -> Vec<f64> {
     const A: f64 = 200.0;

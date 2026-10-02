@@ -48,12 +48,19 @@ classDiagram
         ra_deg: f64
         dec_deg: f64
         component: string
+        mass: f64?
+        logzsol: f64?
+        dust2: f64?
+        tage: f64?
+        gas_logu: f64?
+        sfr_avg: f64?
+        ssfr_avg: f64?
         area_pix: i64
         area_arcsec2: f64
-        r_eff_arcsec: f64
+        r_eff_arcsec: f64?
         area_kpc2: f64
-        r_eff_kpc: f64
-        inside: bool
+        r_eff_kpc: f64?
+        inside: bool?
     }
     Manifest "1" --> "*" Dataset
     Dataset "1" --> "*" Cube
@@ -99,3 +106,19 @@ F070W 0.704, F090W 0.901, F115W 1.154, F140M 1.404, F150W 1.501, F162M 1.627,
 F182M 1.845, F200W 1.990, F210M 2.093, F250M 2.503, F277W 2.786, F300M 2.996,
 F335M 3.365, F356W 3.563, F360M 3.621, F410M 4.092, F430M 4.280, F444W 4.421,
 F460M 4.624, F480M 4.834.
+
+## Clump field semantics
+
+The catalog supplies `mass` as linear stellar mass in M☉. The inspector displays
+`log10(mass)` to three decimals under the label `log M★ (M☉)`; the precise
+quantity is `log10(M★/M☉)`. The remaining SED fields are copied from the
+catalog: `sfr_avg` is M☉/yr, `ssfr_avg` is yr⁻¹, `logzsol` is log Z/Z☉,
+`dust2` is τ₂, `tage` is Gyr, and `gas_logu` is log U.
+
+`mass`, all SED fields, `r_eff_*`, and `inside` are optional. Missing values
+serialize as JSON `null` and display as `—`. `ra_deg` and `dec_deg` are the
+only clump-table values derived by Jellyscope; they are calculated from the
+centroid and cube WCS.
+
+The complete equations and display rules are in
+[`clump-data-calculations.tex`](clump-data-calculations.tex).

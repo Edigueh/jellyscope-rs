@@ -12,6 +12,7 @@ check:
     cargo fmt --check
     cargo clippy --all-targets -- -D warnings
     cargo test
+    node --test web/mass-format.test.mjs
 
 fmt:
     cargo fmt

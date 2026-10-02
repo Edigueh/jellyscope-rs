@@ -1,6 +1,7 @@
 //! The `manifest.json` contract between `bake` and the WASM viewer, plus the
 //! `NIRCam` wavelength table and default-RGB picker (ported from `config.py` and
-//! `app.js`). Texture files are raw `RGBA` bytes, `nx*ny*4`, row-major.
+//! `app.js`). Flux sidecars are raw little-endian `f32` values, `nx*ny`,
+//! row-major. The viewer converts them to RGBA after applying display math.
 
 use serde::Serialize;
 

@@ -11,7 +11,6 @@ flowchart TB
         bake[bake<br/>native CLI<br/>fitrs + serde + thiserror]
         viewer[viewer<br/>cdylib -> WASM<br/>wasm-bindgen + web-sys]
     end
-    core --> bake
     core --> viewer
     web[web/<br/>index.html + glue.js + style.css] -->|loads| viewer
 ```
@@ -47,7 +46,6 @@ flowchart LR
         c_comp[composite.rs<br/>percentile + lupton RGB]
     end
 
-    b_main -.->|writes f32| core_crate
     v_lib --> c_stretch
     v_lib --> c_comp
 ```

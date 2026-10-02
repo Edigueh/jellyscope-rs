@@ -2,6 +2,7 @@
 // and the manifest, and wires the DOM. Live stretch/composite/colormap in WASM,
 // multi-clump selection + rect/lasso + rail sections in JS. No framework.
 import init, { Viewer } from "./pkg/viewer.js";
+import { formatLogMass } from "./mass-format.mjs";
 
 const $ = (id) => document.getElementById(id);
 // Docker serves glue.js under /web; the Pages artifact puts it beside dist/.
@@ -722,7 +723,7 @@ function propertyRows(cl) {
     ["Centroid y", formatOptional(cl.y0, 1)],
     ["RA (deg)", formatOptional(cl.ra_deg, 6)],
     ["Dec (deg)", formatOptional(cl.dec_deg, 6)],
-    ["log M★ (M☉)", formatOptional(cl.mass, 3)],
+    ["log M★ (M☉)", formatLogMass(cl.mass)],
     ["SFR (M☉/yr)", formatOptional(cl.sfr_avg, 4)],
     ["sSFR (yr⁻¹)", formatExponential(cl.ssfr_avg)],
     ["log Z/Z☉", formatOptional(cl.logzsol, 3)],

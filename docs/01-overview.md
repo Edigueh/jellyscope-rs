@@ -1,6 +1,7 @@
 # Overview
 
-Static site. Zero runtime server. Astronomy math shared f64 between native bake and WASM viewer.
+Static site. Zero runtime server. The bake CLI prepares raw data and manifest
+geometry; the WASM viewer applies the f64 display math live.
 
 ## System context
 
@@ -40,6 +41,10 @@ sequenceDiagram
 ## Key properties
 
 - Raw f64 math never shipped: f32 planes shipped, viewer widens to f64.
-- Astronomy math (stretch, composite) in `jelly-core`; same code in bake + viewer.
+- Stretch and RGB composite math lives in `jelly-core` and runs in the viewer.
+- Bake writes raw f32 planes and computes WCS-derived clump coordinates.
 - Pan/zoom = matrix uniform. No data re-fetch while navigating.
 - Click → pixmap lookup → clump id.
+
+See [`clump-data-calculations.tex`](clump-data-calculations.tex) for formulas,
+units, precision, and invalid-value behavior.

@@ -1,6 +1,6 @@
-//! Pure-f64 flux stretches and RGB composites shared by `bake` (native) and
-//! `viewer` (WASM). Ported 1:1 from the Python jellyscope; carries the golden
-//! tests that pin the astronomy math against the original.
+//! Pure-f64 flux stretches and RGB composites used by the WASM viewer. Ported
+//! 1:1 from the Python jellyscope; golden tests pin the math against the
+//! original.
 #![forbid(unsafe_code)]
 
 pub mod composite;

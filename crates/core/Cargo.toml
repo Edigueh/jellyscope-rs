@@ -8,4 +8,4 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-# none — stretch/composite are pure std f64 math shared by bake and viewer.
+# none — stretch/composite are pure std f64 math used by the viewer.

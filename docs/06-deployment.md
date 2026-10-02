@@ -68,3 +68,10 @@ flowchart LR
     B --> C[any static server<br/>nginx / CDN / python http.server]
     C --> D[Browser]
 ```
+
+## GitHub Pages data artifact
+
+The Pages workflow downloads the release asset named exactly `dist.tar.gz`,
+extracts it as `dist/`, copies `web/` beside it, and publishes the combined
+directory. A release upload label does not rename an asset: its actual filename
+must be `dist.tar.gz`.

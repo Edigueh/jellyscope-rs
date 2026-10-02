@@ -1,0 +1,161 @@
+\documentclass[11pt]{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\newcommand{\code}[1]{\path{#1}}
+\title{Jellyscope Calculation and Display Reference}
+\author{Jellyscope}
+\date{\today}
+\begin{document}
+\maketitle
+\begin{abstract}
+This document defines the current Jellyscope calculations, units, formatting,
+precision, and invalid-value behavior. It covers the clump inspector, WCS,
+separations, image stretches, RGB composites, and static data flow.
+\end{abstract}
+
+\section{Data flow and precision}
+The bake CLI reads a primary-HDU FITS cube as f64 values and reads clump
+metadata from \code{clumps_properties.csv} and pixel assignments from
+\code{clumps_pixels.csv}. It writes one little-endian f32 plane per filter,
+an i32 pixel-to-clump grid, and \code{manifest.json}. The f32 planes are only
+a transport representation: the WASM viewer widens them back to f64 before
+running display mathematics. RGBA bytes are produced in the viewer after a
+stretch or composite; final display channels are 8-bit.
+
+\section{Clump inspector fields}
+Catalog values are copied into the manifest and are not recomputed from area,
+pixels, or other SED fields. Optional missing values serialize as JSON
+\code{null} and display as an em dash.
+\small
+\begin{longtable}{p{0.24\textwidth}p{0.22\textwidth}p{0.46\textwidth}}
+\toprule
+\textbf{Displayed row} & \textbf{Manifest field} & \textbf{Meaning and formatting} \\
+\midrule
+\endhead
+Clump ID & \code{id} & Catalog \code{clump_id}; integer. \\
+Component & \code{component} & Catalog component name, capitalized. \\
+Inside disk & \code{inside} & Optional Boolean: Yes, No, or em dash. \\
+Area (pixels) & \code{area_pix} & Catalog integer; not recomputed from the grid. \\
+Area (arcsec$^2$) & \code{area_arcsec2} & Catalog value; four decimal places. \\
+Area (kpc$^2$) & \code{area_kpc2} & Catalog value; four decimal places. \\
+$R_{\rm eff}$ (arcsec) & \code{r_eff_arcsec} & Optional catalog value; four decimal places. \\
+$R_{\rm eff}$ (kpc) & \code{r_eff_kpc} & Optional catalog value; four decimal places. \\
+Centroid $x$ & \code{x0} & Catalog image coordinate; one decimal place. \\
+Centroid $y$ & \code{y0} & Catalog image coordinate; one decimal place. \\
+RA (deg) & \code{ra_deg} & Derived from the centroid and affine WCS; six decimal places. \\
+Dec (deg) & \code{dec_deg} & Derived from the centroid and affine WCS; six decimal places. \\
+$\log_{10}(M_\star/M_\odot)$ & \code{mass} & Linear catalog mass in M$_\odot$ transformed with $\log_{10}$; three decimals. \\
+SFR (M$_\odot$/yr) & \code{sfr_avg} & Optional catalog value; four decimal places. \\
+sSFR (yr$^{-1}$) & \code{ssfr_avg} & Optional catalog value; scientific notation with three decimals. \\
+$\log Z/Z_\odot$ & \code{logzsol} & Optional catalog value; three decimal places. \\
+Dust $\tau_2$ & \code{dust2} & Optional catalog value; three decimal places. \\
+Age (Gyr) & \code{tage} & Optional catalog value; three decimal places. \\
+$\log U$ (gas) & \code{gas_logu} & Optional catalog value; two decimal places. \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+The precise stellar-mass calculation is
+\begin{equation}
+  m_{\rm display}=\log_{10}\left(\frac{M_\star}{M_\odot}\right).
+\end{equation}
+The catalog field \code{mass} is the positive linear number of solar masses.
+For example, $3{,}007{,}335.42439138$ becomes $6.478$. A missing or
+non-positive mass is unavailable rather than a valid logarithm. The UI retains
+the existing Python-compatible label $\log M_\star\,(M_\odot)$.
+
+The parser requires \code{clump_id}, \code{area_pix}, \code{area_arcsec2},
+\code{x0}, \code{y0}, \code{area_kpc2}, and \code{component}. The SED fields,
+effective radii, and \code{inside} are optional.
+
+\section{Centroid to sky coordinates}
+FITS reference pixels are one-based. For the rotation-free, axis-aligned WCS,
+Jellyscope sets
+\begin{align}
+ p_x &= \mathrm{CRPIX1}-1, & p_y &= \mathrm{CRPIX2}-1,\\
+ s_x &= \mathrm{PC1\_1}\,\mathrm{CDELT1}, & s_y &= \mathrm{PC2\_2}\,\mathrm{CDELT2},\\
+ c &= \cos(\mathrm{CRVAL2}\,\pi/180).
+\end{align}
+For centroid $(x_0,y_0)$ it computes
+\begin{align}
+ \mathrm{RA} &= \mathrm{CRVAL1}+\frac{s_x(x_0-p_x)}{c},\\
+ \mathrm{Dec} &= \mathrm{CRVAL2}+s_y(y_0-p_y).
+\end{align}
+Only browser display rounding is applied afterward. The approximation assumes
+no rotation, skew, CD, or SIP distortion. The manifest pixel scale is
+\begin{equation}
+ p_{\rm arcsec}=3600\frac{|s_x|+|s_y|}{2}.
+\end{equation}
+
+\section{Pairwise angular separation}
+The browser converts manifest RA/Dec to radians and uses
+\begin{align}
+ a &= \sin^2\left(\frac{\delta_2-\delta_1}{2}\right)+
+ \cos(\delta_1)\cos(\delta_2)\sin^2\left(\frac{\alpha_2-\alpha_1}{2}\right),\\
+ \theta &= 2\arcsin(\sqrt{a}),\\
+ d_{\rm arcsec} &= \theta\frac{180}{\pi}3600.
+\end{align}
+Selected clumps are sorted by ID; the lower triangle is filled and formatted
+to two decimals, the upper triangle is empty, and the diagonal is an em dash.
+
+\section{Single-filter stretches}
+For the log stretch, finite positive fluxes define the 10th and 99.98th
+percentiles $v_{10}$ and $v_{99.98}$. The viewer evaluates
+\begin{align}
+ x_c &= \operatorname{clip}(x,v_{10},v_{99.98}),\\
+ u &= \frac{x_c-v_{10}}{v_{99.98}-v_{10}+10^{-10}},\\
+ L(x) &= \frac{\ln(200u+1)}{\ln(201)}.
+\end{align}
+Non-positive values clip to zero; NaN values remain invalid and transparent.
+
+For the Lupton-asinh stretch, finite pixels are sigma-clipped around their
+median at $\pm3\sigma$ for at most five iterations. With resulting background
+median $m$, population standard deviation $\sigma$, $Q=8$, and
+$\alpha=0.02/(\sigma+10^{-10})$,
+\begin{equation}
+ A(x)=\frac{\operatorname{asinh}(\alpha Q(x-m))}{Q}.
+\end{equation}
+The result is divided by the 99.5th percentile of finite $A(x)$ and clipped
+to $[0,1]$; NaN input remains transparent.
+
+\section{RGB composites}
+The default percentile-asinh recipe processes each band independently. It
+subtracts the finite median, clips to the 10th--99.9th percentile range, maps
+with
+\begin{equation}
+ y=\frac{\operatorname{asinh}(u/0.1)}{\operatorname{asinh}(10)},
+\end{equation}
+sets values below $0.05$ to zero, applies weights $(1.0,1.02,1.02)$, clips to
+$[0,1]$, and converts to bytes. A pixel invalid in any band becomes black.
+
+The Lupton recipe uses $I=(R+G+B)/3$, the same background estimate, and a
+user-selected $Q$ (default 8):
+\begin{equation}
+ f(I)=\frac{\operatorname{asinh}(\alpha Q(I-m))}{Q},\qquad
+ r=\frac{f(I)}{I-m}\quad\text{when }I-m>0.
+\end{equation}
+Each background-subtracted channel is multiplied by $r$, clamped at zero,
+and renormalized if a channel exceeds one. Positive channels are then globally
+normalized by their 99.5th percentile, clipped to $[0,1]$, and converted to
+8-bit channels.
+
+\section{Pixel grid and boundaries}
+The i32 grid is row-major with index $yN_x+x$; empty pixels contain $-1$.
+Out-of-bounds assignments are discarded. Rust builds each boundary with
+Andrew's monotone-chain convex hull and closes the polygon. The browser applies
+two Chaikin corner-cutting iterations for the overlay only; catalog area and
+pixel membership do not change.
+
+\section{Implementation references}
+\begin{itemize}
+  \item \code{crates/bake/src/clumps.rs}: catalog parsing, grid, and hull;
+  \item \code{crates/bake/src/wcs.rs}: affine WCS and separation golden;
+  \item \code{crates/bake/src/main.rs}: FITS-to-manifest assembly and f32 encoding;
+  \item \code{crates/core/src/stretch.rs}: single-filter stretches;
+  \item \code{crates/core/src/composite.rs}: RGB recipes;
+  \item \code{web/glue.js}: property formatting, readout, separations, and tooltips.
+\end{itemize}
+\end{document}

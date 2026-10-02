@@ -1,17 +1,17 @@
 # Jellyscope
 
 Browser viewer for JWST jellyfish-galaxy datacubes. A Rust CLI bakes NIRCam
-FITS cubes into static textures; a Rust→WASM WebGL viewer renders them
+FITS cubes into static f32 planes; a Rust→WASM WebGL viewer renders them
 client-side with pan, zoom, filter/RGB switching, and clump overlays. No server
 at runtime — the baked output is a static site.
 
-This is a rewrite of the Python/FastAPI [jellyscope]; the astronomy math
-(stretches, RGB composites, WCS) is ported 1:1 and pinned by golden tests
-against the original.
+This is a rewrite of the Python/FastAPI [jellyscope]. The image stretch and RGB
+math is ported 1:1 into `jelly-core` and pinned by golden tests against the
+original; the bake CLI preserves raw flux and derives manifest geometry.
 
 ## Layout
 
-    crates/bake     native CLI: FITS + clump CSVs -> dist/ textures + manifest.json
+    crates/bake     native CLI: FITS + clump CSVs -> dist/ f32 planes + manifest.json
     crates/viewer   cdylib compiled to WASM: WebGL2 rendering + camera
     web             HTML/CSS/JS shell that drives the viewer (no framework)
 
@@ -42,16 +42,17 @@ cubes there). Each dataset directory holds one or two
 
 ## How it works
 
-`bake` reads each cube, applies the display math on the CPU, and writes one
-grayscale RGBA texture per filter per stretch (`log`, `asinh`), two RGB
-composites (`percentile-asinh`, `lupton`), a pixel→clump-id grid, and a
-`manifest.json` describing everything. The viewer uploads a texture to WebGL2
-and draws a single quad; pan/zoom is a matrix uniform, so no data is re-fetched
-while navigating. Clump boundaries are drawn as line overlays; clicking maps the
-cursor to a pixel and looks up the clump in the grid.
+`bake` reads each cube and writes raw little-endian f32 flux planes, a
+pixel→clump-id grid, clump metadata, and a `manifest.json`. The viewer widens
+the planes to f64, applies the live `log`/`asinh` stretch or RGB composite, and
+uploads the resulting RGBA image to WebGL2. Pan/zoom is a matrix uniform, so no
+data is re-fetched while navigating. Clump boundaries are drawn as line
+overlays; clicking maps the cursor to a pixel and looks up the clump in the grid.
 
-Display parameters are fixed at bake time (the original app exposed no live
-tuning). The raw f64 is not shipped; re-bake to change stretch parameters.
+The raw f64 is not shipped: f32 planes are widened to f64 before display math.
+Stretch constants are fixed in `jelly-core`; the Lupton RGB Q value is live in
+the viewer. See [`docs/clump-data-calculations.tex`](docs/clump-data-calculations.tex)
+for the formulas and units.
 
 ## License
 

@@ -5,10 +5,11 @@ State as of 2026-08-11. Seed doc for a fresh conversation in this repo.
 ## What it is
 
 Ground-up rewrite of the Python/FastAPI [jellyscope]. Architecture is
-**fundamentally different — no runtime server.** A native Rust CLI bakes FITS →
-static textures + `manifest.json`; a Rust→WASM WebGL2 viewer renders
-client-side. Baked output is a static site. Astronomy math ported **1:1**,
-pinned by golden tests against the Python original.
+**fundamentally different — no runtime server.** A native Rust CLI converts
+FITS and CSV inputs into raw f32 sidecars + `manifest.json`; a Rust→WASM
+WebGL2 viewer performs display math client-side. Baked output is a static
+site. Astronomy math is ported **1:1** where implemented and pinned by golden
+tests against the Python original.
 
 ## Repo state
 
@@ -25,11 +26,16 @@ Deps: `fitrs`, `serde`, `thiserror`.
 |---|---|
 | `fits.rs` | FITS cube reader (shape / filters / WCS) |
 | `wcs.rs` | linear WCS affine + great-circle separation |
-| `stretch.rs` | log + lupton-asinh, sigma-clipped background |
-| `composite.rs` | percentile-asinh + Lupton RGB |
 | `clumps.rs` | CSV load, monotone-chain hull, pixel grid |
 | `manifest.rs` | manifest.json emit |
 | `main.rs` | orchestration data/ → dist/ |
+
+### `crates/core` — pure viewer display math
+
+| file | role |
+|---|---|
+| `stretch.rs` | log + Lupton-asinh, sigma-clipped background |
+| `composite.rs` | percentile-asinh + Lupton RGB |
 
 ### `crates/viewer` — cdylib → WASM (507 LOC)
 
@@ -57,9 +63,12 @@ web shell.
 
 ## Key divergences from Python jellyscope
 
-- Display params **fixed at bake time** — no live stretch tuning (the Python app
-  exposed none either). Re-bake to change stretch parameters.
-- Raw f64 not shipped — only baked RGBA textures.
+- Raw f64 is converted to f32 little-endian planes for transport; the viewer
+  widens them to f64 and applies display math live.
+- Stretch constants are fixed in `jelly-core`; Lupton Q is adjustable in the
+  viewer.
+- Clump `mass` is stored as linear M☉ and displayed as `log10(mass)` to three
+  decimals.
 - No FastAPI, no runtime endpoints. Static site.
 
 ## Build / dev
@@ -73,6 +82,9 @@ web shell.
   0.2.100 + `just`. `data/` is a dir of datasets (symlink/copy FITS cubes);
   each holds `cut_datacube_nircam*.fits` + `clumps_properties.csv` +
   `clumps_pixels.csv`.
+
+The complete field and formula reference is
+[`docs/clump-data-calculations.tex`](docs/clump-data-calculations.tex).
 
 ## History note
 

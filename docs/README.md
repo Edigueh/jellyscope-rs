@@ -10,3 +10,6 @@ Jellyscope. No server at runtime. CLI bakes FITS → static assets; WASM viewer 
 - [`04-runtime.md`](04-runtime.md) — viewer runtime + interactions
 - [`05-data-model.md`](05-data-model.md) — manifest + file layout
 - [`06-deployment.md`](06-deployment.md) — docker / static hosting
+- [`clump-data-calculations.tex`](clump-data-calculations.tex) — clump fields,
+  image math, WCS, separations, units, and precision
+- [`clump-data-calculations.pdf`](clump-data-calculations.pdf) — rendered reference
